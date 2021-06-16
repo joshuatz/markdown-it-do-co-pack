@@ -1,5 +1,5 @@
 import { Rule } from './types';
-import { getHtmlBlock, SpanWrapVars, tokenRecurser } from './utils';
+import { getHtmlBlock, getNewLineToken, SpanWrapVars, tokenRecurser } from './utils';
 
 /**
  * This rule handles inline notes
@@ -145,18 +145,140 @@ export const VariableHighlightRule: Rule = (state) => {
 };
 
 export const FencedCodeBlockRule: Rule = (state) => {
+	const { escapeHtml } = state.md.utils;
 	tokenRecurser(state, (token, index, tokenArr) => {
 		if (token.type === 'fence' && token.tag === 'code') {
+			// console.log({ codeToken: token });
+			const labels: {
+				primary: null | string;
+				secondary: null | string;
+				full: boolean;
+			} = {
+				primary: null,
+				secondary: null,
+				full: false,
+			};
+			let commandPrefix: string | null = null;
+
+			const rawCodeLines = token.content.split(/\r\n|\n|\r/gm);
+			const processedCodeLines: string[] = [];
+			/** Any extra classes to be injected into `<pre>` */
+			let extraPreClasses: string[] = [];
+			/**
+			 * Any text that needs to come immediately before ending code tags
+			 *  - Line break will _not_ be used between this text and closing tags
+			 */
+			let extraStringBeforeClosingCodeTags = '';
+
 			// Capture language string. Example: `js`
-			const lang = token.info;
+			let lang = token.info;
+
+			// Capture DO labels (special feature)
+			// There are two label types, primary (just `label`) and secondary
+			// EDGE CASE: Parser is flexible, and labels can come in any order,
+			// and even handle accidental multiples - will just use first of
+			// each type
+			const labelPatt = /^\[(label|secondary_label) (.+)\]$/i;
+			for (let i = 0; i < rawCodeLines.length; i++) {
+				let drop = false;
+
+				if (!labels.full && labelPatt.test(rawCodeLines[i])) {
+					const matches = rawCodeLines[i].match(labelPatt)!;
+					const labelType = matches[1].toLowerCase() as 'label' | 'secondary_label';
+					const labelVal = matches[2];
+					const key = labelType === 'label' ? 'primary' : 'secondary';
+					labels[key] = labelVal;
+
+					// Remove the label line from showing up in the actual code code
+					drop = true;
+
+					// Check if we are done
+					if (labels.primary && labels.secondary) {
+						labels.full = true;
+					}
+				}
+
+				if (!drop) {
+					processedCodeLines.push(rawCodeLines[i]);
+				}
+			}
+
+			// Special - command prefixes
+			// Options are: `command`, `super_user` or `custom_prefix(prefix)`
+			const customPrefixPatt = /^custom_prefix\((.+)\)$/i;
+			if (lang === 'command' || lang === 'super_user' || customPrefixPatt.test(lang)) {
+				let commandStr = lang;
+
+				// All commands assume `bash` lang type, and override MDIT lang
+				lang = 'bash';
+
+				if (commandStr === 'command') {
+					commandPrefix = '$';
+				} else if (commandStr === 'super_user') {
+					commandPrefix = '#';
+				} else {
+					// Custom
+					commandPrefix = commandStr.match(customPrefixPatt)![1];
+					commandStr = 'custom_prefix';
+				}
+
+				extraPreClasses.push(commandStr, 'prefixed');
+
+				// Wrap all lines in custom `<ul><li></li></ul>`
+				// To have complete parity with the MD preview tool, line breaks are a little odd
+				// it breaks them right before closing tags, so `<ul><li>line 1\n</li><li>line 2\n</li></ul>
+				const liOpenHtml = `<li class="line" data-prefix="${escapeHtml(commandPrefix)}">`;
+				processedCodeLines[0] = `<ul class="prefixed">${liOpenHtml}${processedCodeLines[0]}`;
+				processedCodeLines.forEach((line, index) => {
+					// Looks like empty lines are preserved if they come in-between other command lines
+					if (index > 0 && (index !== processedCodeLines.length - 1 || line.length)) {
+						processedCodeLines[index] = `</li>${liOpenHtml}${line}`;
+					}
+				});
+				// Close out final list item, and entire list, inline with code closing tags
+				extraStringBeforeClosingCodeTags = `</li></ul>`;
+			}
+
 			// Make sure to catch and span wrap <^>varString<^> blocks
 			// and also make sure only one line break between code end and </code> tag
-			const rawInnerCode = SpanWrapVars(token.content.trimEnd());
-			tokenArr[index] = getHtmlBlock(
-				state,
-				token.nesting,
-				`<pre class="code-pre "><code class="code-highlight language-${lang}">${rawInnerCode}\n</code></pre>`
-			);
+			let rawInnerCode = SpanWrapVars(processedCodeLines.join('\n')).trimEnd();
+
+			if (labels.secondary) {
+				// secondary label is actually inserted directly inside <code>
+				rawInnerCode =
+					`<div class="secondary-code-label " title="${labels.secondary}">${labels.secondary}</div>` +
+					rawInnerCode;
+			}
+
+			let renderCode = `<pre class="code-pre ${extraPreClasses.join(
+				' '
+			)}"><code class="code-highlight language-${lang}">${rawInnerCode}\n${extraStringBeforeClosingCodeTags}</code></pre>\n`;
+
+			if (labels.primary) {
+				// Primary label is inserted before entire rest of code, outside
+				// of the <pre> wrapper
+				renderCode =
+					`<div class="code-label " title="${labels.primary}">${labels.primary}</div>` +
+					renderCode;
+			}
+
+			// console.log({ renderCode });
+
+			tokenArr[index] = getHtmlBlock(state, token.nesting, renderCode);
+		}
+	});
+
+	return true;
+};
+
+export const ParagraphsRule: Rule = (state) => {
+	// We could hook into a lower-level rule, but this approach here does not require
+	// precise ordering of hooks or relying on named rules
+	tokenRecurser(state, (token, index, tokenArr) => {
+		if (token.type === 'paragraph_close') {
+			// DO uses an extra line break after paragraph tags
+			// In actuality, this doesn't impact UI, since the DOM doesn't really care about this
+			tokenArr.splice(index, 1, token, getNewLineToken(state, token.nesting));
 		}
 	});
 

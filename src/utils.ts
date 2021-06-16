@@ -7,6 +7,12 @@ export function getHtmlBlock(state: StateCore, nesting: Nesting, content?: strin
 	return token;
 }
 
+export function getNewLineToken(state: StateCore, nesting: Nesting = 0) {
+	const token = new state.Token('text', '', nesting);
+	token.content = '\n';
+	return token;
+}
+
 /**
  * Simple, and likely non-optimal recurser / flattener of tokens
  * - Inside callback, use index and array to replace current token if need be
