@@ -2,6 +2,7 @@ import type { PluginWithOptions } from 'markdown-it';
 import {
 	FencedCodeBlockRule,
 	HeadingsRule,
+	LinksRule,
 	NotesRule,
 	SpacingRule,
 	VariableHighlightRule,
@@ -14,6 +15,10 @@ import { docoFlavoredReplacer } from './utils';
  *  - So far, rules should not care about order, but could in the future
  */
 const OrderedRules = [
+	{
+		name: 'do_links',
+		ruleFn: LinksRule,
+	},
 	{
 		name: 'do_notes',
 		ruleFn: NotesRule,
@@ -56,13 +61,7 @@ function applyLowLevelDefaults(md: MarkdownIt) {
 	md.configure('default');
 
 	// These are different from MDIT defaults
-	md.options.html = true;
 	md.options.breaks = true;
-	md.options.quotes = `“”“`;
-	md.options.typographer;
-
-	// Because md.options.typographer = false, we have to manually enable smartquotes
-	// md.enable('smartquotes');
 
 	// Use `<br>` instead of MDIT default of `<br>\n`
 	// https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/renderer.js#L111-L113
@@ -75,7 +74,6 @@ function applyLowLevelDefaults(md: MarkdownIt) {
 	 * We are overriding the default text renderer
 	 * @see https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/renderer.js#L116-L118
 	 */
-	const coreTextRule = md.renderer.rules.text!;
 	md.renderer.rules.text = (tokens, index, options, env, self) => {
 		let text = tokens[index].content;
 		return docoFlavoredReplacer(text);

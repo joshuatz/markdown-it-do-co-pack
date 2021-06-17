@@ -42,10 +42,7 @@ describe('Tests Individual Rules', () => {
 	let mdItInstance: MarkdownIt;
 
 	const reset = () => {
-		mdItInstance = new MarkdownIt({
-			html: true,
-			breaks: true,
-		});
+		mdItInstance = new MarkdownIt();
 		applyLowLevelDefaults(mdItInstance);
 	};
 	beforeEach(() => {
@@ -53,7 +50,12 @@ describe('Tests Individual Rules', () => {
 	});
 
 	describe('Tests regular text', () => {
-		it('should render a paragraph', () => {
+		beforeEach(() => {
+			// @TODO - should spacing rule be auto-loaded in default loader?
+			const SpacingRule = RulesByName.do_spacing;
+			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
+		});
+		it.skip('should render a paragraph', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: 'Hello',
@@ -64,6 +66,25 @@ describe('Tests Individual Rules', () => {
 					input: "abc 👨‍💻 \"test\" *^% (R)(r)(C)(P)(tm)(p)'' he(R)llo& alskjfd\"text\"ajsfdd ''single quote wrapped''",
 					expected:
 						'<p>abc 👨‍💻 &ldquo;test&rdquo; *^% &reg;&reg;&copy;(P)&trade;(p)&ldquo; he&reg;llo&amp; alskjfd&quot;text&quot;ajsfdd &rsquo;&lsquo;single quote wrapped&rdquo;</p>\n\n',
+				},
+				// Weird single quote handling
+				{
+					input: `('hello')\n\na 'hello' to you\n\nI say 'hello'\n\n'hello' on the left\n\nsquish'hello'in middle`,
+					expected: `<p>(&lsquo;hello&rsquo;)</p>\n\n<p>a 'hello&rsquo; to you</p>\n\n<p>I say 'hello&rsquo;</p>\n\n<p>'hello&rsquo; on the left</p>\n\n<p>squish'hello'in middle</p>\n\n`,
+				},
+				{
+					input: `$'\n\n$'d\n\n('f)\n\n(f')\n\n&'\n\n&'d\n\n)'\n\n)''\n\n)'\n\n)'k\n\n'`,
+					expected: `<p>$&rsquo;</p>\n\n<p>$&rsquo;d</p>\n\n<p>(&lsquo;f)</p>\n\n<p>(f&rsquo;)</p>\n\n<p>&amp;&rsquo;</p>\n\n<p>&amp;&rsquo;d</p>\n\n<p>)&rsquo;</p>\n\n<p>)&ldquo;</p>\n\n<p>)&rsquo;</p>\n\n<p>)'k</p>\n\n<p>&rsquo;</p>\n\n`,
+				},
+			]);
+		});
+
+		it(`should escape based on DO's rules`, () => {
+			checkRenders(mdItInstance, [
+				{
+					input: "<div>Hello</div>\n\n<script>alert('Hello!');</script>\n\n😀✨",
+					expected:
+						'<p>&lt;div&gt;Hello&lt;/div&gt;</p>\n\n<p>&lt;script&gt;alert(&lsquo;Hello!&rsquo;);&lt;/script&gt;</p>\n\n<p>😀✨</p>\n\n',
 				},
 			]);
 		});
@@ -82,6 +103,35 @@ describe('Tests Individual Rules', () => {
 					input: 'paragraph one\n\nparagraph two\nno break here\n\n- list\n\nanother paragraph',
 					expected:
 						'<p>paragraph one</p>\n\n<p>paragraph two<br>\nno break here</p>\n\n<ul>\n<li>list</li>\n</ul>\n\n<p>another paragraph</p>\n\n',
+				},
+			]);
+		});
+	});
+
+	describe('Tests links rule', () => {
+		beforeEach(() => {
+			// @TODO - should spacing rule be auto-loaded in default loader?
+			const SpacingRule = RulesByName.do_spacing;
+			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
+			const LinksRule = RulesByName.do_links;
+			mdItInstance.core.ruler.push(LinksRule.name, LinksRule.ruleFn);
+		});
+
+		it('should handle a variety of link types', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: '[My Website](https://joshuatz.com/)\n\n[DO](https://www.digitalocean.com/)\n\n<a href="https://www.google.com/" rel="nofollow">Google</a>\n\n<a href="https://www.bing.com/">Bing</a>',
+					expected:
+						'<p><a href="https://joshuatz.com/" rel="nofollow">My Website</a></p>\n\n<p><a href="https://www.digitalocean.com/" rel="nofollow">DO</a></p>\n\n<p>&lt;a href=&ldquo;https://www.google.com/&rdquo; rel=&ldquo;nofollow&rdquo;&gt;Google&lt;/a&gt;</p>\n\n<p>&lt;a href=&ldquo;https://www.bing.com/&rdquo;&gt;Bing&lt;/a&gt;</p>\n\n',
+				},
+			]);
+		});
+
+		it('should handle links mixed into other content', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: '',
+					expected: '',
 				},
 			]);
 		});
@@ -127,7 +177,7 @@ describe('Tests Individual Rules', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: `<$>[draft]\r\n**Draft:** This diagram will be updated in the next revision.\n<$>`,
-					expected: `<p><span class="draft"><strong>Draft:</strong> This diagram will be updated in the next revision.<br></span></p>\n`,
+					expected: `<p><span class='draft'><strong>Draft:</strong> This diagram will be updated in the next revision.<br></span></p>\n`,
 				},
 			]);
 		});
@@ -147,6 +197,11 @@ describe('Tests Individual Rules', () => {
 				{
 					input: `Hello <^>Joshua<^>!`,
 					expected: `<p>Hello <span class="highlight">Joshua</span>!</p>`,
+				},
+				{
+					input: 'Paragraph, `code`, now <^>variable<^>, now `a <^>var<^> in in-line code`, now end of paragraph.',
+					expected:
+						'<p>Paragraph, <code>code</code>, now <span class="highlight">variable</span>, now <code>a <span class="highlight">var</span> in in-line code</code>, now end of paragraph.</p>\n',
 				},
 			]);
 		});
@@ -220,6 +275,15 @@ describe('Tests Individual Rules', () => {
 					input: '```ts\n[secondary_label main]\nfunction main() {\n  const str: string = "hello";\n  console.log(str);\n}\n```',
 					expected:
 						'<pre class="code-pre "><code class="code-highlight language-ts"><div class="secondary-code-label " title="main">main</div>function main() {\n  const str: string = "hello";\n  console.log(str);\n}\n</code></pre>\n',
+				},
+			]);
+		});
+
+		it('should handle code blocks that are missing language specifiers', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: '```\nplain text\n```',
+					expected: '<pre class="code-pre "><code>plain text\n</code></pre>\n',
 				},
 			]);
 		});

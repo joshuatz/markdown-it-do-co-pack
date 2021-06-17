@@ -72,22 +72,22 @@ export function docoFlavoredReplacer(input: string) {
 		// Special quote replacement
 		// DO tries to find pairs first, replacing with fancy quotes, then falls back to regular doubles
 		{
+			find: /"([^"]*?)"/g,
+			replace: (substring) => {
+				substring = substring.replace(/"/g, '');
+				return `&ldquo;${substring}&rdquo;`;
+			},
+		},
+		{
 			find: /“|[\r\n ]"[^\r\n ]|"$|"'$/g,
 			replace: (substring) => {
-				return substring.replace(/[“"]|''/g, '&ldquo;');
+				return substring.replace(/[“"]/g, '&ldquo;');
 			},
 		},
 		{
 			find: /”|[^\r\n ]"[\r\n ]/g,
 			replace: (substring) => {
-				return substring.replace(/[”"]|''/g, '&rdquo;');
-			},
-		},
-		// This doesn't really make sense, but they are using ldquo for double single quotes on the *RIGHT* side...
-		{
-			find: /[^\r\n ]''[\r\n ]/g,
-			replace: (substring) => {
-				return substring.replace(/''/g, '&ldquo;');
+				return substring.replace(/[”"]/g, '&rdquo;');
 			},
 		},
 		// ... and, if a pair of singles shows up on the left, it is replaced by right single and then left single...
@@ -97,14 +97,45 @@ export function docoFlavoredReplacer(input: string) {
 				return substring.replace(/''/g, '&rsquo;&lsquo;');
 			},
 		},
+		// This doesn't really make sense, but they are using ldquo for double single quotes
+		// on the *RIGHT* side (something touching on left)...
+		// whether or not there is text touching on the right,
+		// but NOT if it is the only thing on the line
+		{
+			find: /[^\r\n ]''/g,
+			replace: (substring) => {
+				return substring.replace(/''/g, '&ldquo;');
+			},
+		},
 		// ... and if a pair of singles is last, then rdquo instead of left single or left double
 		{
 			find: /''$/g,
 			replace: '&rdquo;',
 		},
-		// ... and if a single single is last, then rsquo
+		// If a single is on right edge, or alone at end, rsquo
 		{
-			find: /[^']+'$/g,
+			find: /[^']+' |[^']+'$|^'$/g,
+			replace: (substring) => {
+				return substring.replace(/'/g, '&rsquo;');
+			},
+		},
+		// Edge-case: single quote at end of line
+		// {
+		// 	find: /'$/g,
+		// 	replace: '&rsquo;',
+		// },
+		// Edge-case: If single quote is directly touching parenthesis
+		{
+			find: /\('/g,
+			replace: '(&lsquo;',
+		},
+		{
+			find: /'\)/g,
+			replace: '&rsquo;)',
+		},
+		// Edge-case: single quote, unpaired, that touches *certain* chars on left are turned into rsquo
+		{
+			find: /[&$]'|&amp;'/g,
 			replace: (substring) => {
 				return substring.replace(/'/g, '&rsquo;');
 			},

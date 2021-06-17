@@ -31,7 +31,7 @@ export const NotesRule: Rule = (state) => {
 
 			// Since we know our RegEx matched, we can safely assume delimiters are at ends
 			// and just outright replace those tokens
-			const startToken = getHtmlBlock(state, 0, `<span class="${noteTypeString}">`);
+			const startToken = getHtmlBlock(state, 0, `<span class='${noteTypeString}'>`); // They've used single quotes for this one very specific class spot...
 			const endToken = getHtmlBlock(state, 0, `</span>`);
 			children[0] = startToken;
 			children[children.length - 1] = endToken;
@@ -120,6 +120,11 @@ export const VariableHighlightRule: Rule = (state) => {
 			}
 		}
 
+		if (token.type === 'text') {
+			// Have to use HTML block to avoid MDIT escaping out <span>
+			tokenArr[index] = getHtmlBlock(state, token.nesting, SpanWrapVars(token.content));
+		}
+
 		// This is for inline code blocks, NOT fenced
 		if (token.type === 'code_inline') {
 			// A little more complicated than just outright string replacement
@@ -168,6 +173,7 @@ export const FencedCodeBlockRule: Rule = (state) => {
 			let extraStringBeforeClosingCodeTags = '';
 
 			// Capture language string. Example: `js`
+			// Warning: May be empty!
 			let lang = token.info;
 
 			// Capture DO labels (special feature)
@@ -247,9 +253,12 @@ export const FencedCodeBlockRule: Rule = (state) => {
 					rawInnerCode;
 			}
 
-			let renderCode = `<pre class="code-pre ${extraPreClasses.join(
-				' '
-			)}"><code class="code-highlight language-${lang}">${rawInnerCode}\n${extraStringBeforeClosingCodeTags}</code></pre>\n`;
+			const preOpenBlock = `<pre class="code-pre ${extraPreClasses.join(' ')}">`;
+			let codeOpenBlock = `<code>`;
+			if (lang) {
+				codeOpenBlock = `<code class="code-highlight language-${lang}">`;
+			}
+			let renderCode = `${preOpenBlock}${codeOpenBlock}${rawInnerCode}\n${extraStringBeforeClosingCodeTags}</code></pre>\n`;
 
 			if (labels.primary) {
 				// Primary label is inserted before entire rest of code, outside
@@ -284,13 +293,22 @@ export const SpacingRule: Rule = (state) => {
 			'heading_close',
 		];
 		// ...but, not if certain tags follow
-		const skipBeforeTypes = ['list_item_close'];
+		const skipBeforeTypes = ['list_item_close', 'html_block', 'fence'];
+		// ... although adds extra if certain tags follow
+		const addExtraBeforeTypes: string[] = ['paragraph_open'];
 		if (addAfterTagTypes.includes(token.type)) {
-			if (tokenArr[index + 1] && skipBeforeTypes.includes(tokenArr[index + 1].type)) {
+			let nextToken = tokenArr[index + 1];
+			if (nextToken && skipBeforeTypes.includes(nextToken.type)) {
 				return;
 			}
 
-			tokenArr.splice(index, 1, token, getNewLineToken(state, token.nesting));
+			tokenArr.splice(index + 1, 0, getNewLineToken(state, token.nesting));
+
+			nextToken = tokenArr[index + 1];
+
+			if (nextToken && addExtraBeforeTypes.includes(nextToken.type)) {
+				tokenArr.splice(index + 1, 0, getNewLineToken(state, token.nesting));
+			}
 		}
 	});
 
@@ -362,6 +380,19 @@ export const HeadingsRule: Rule = (state) => {
 	MarkdownItAnchor(Interceptor as MarkdownIt, anchorOptions);
 
 	// Actual heading text content is handled through text renderer
+
+	return true;
+};
+
+/**
+ * I _believe_ the nofollow part of this rule is only applied to the previewer tool, and not to actual published posts
+ */
+export const LinksRule: Rule = (state) => {
+	tokenRecurser(state, (token, index, tokenArr) => {
+		if (token.type === 'link_open') {
+			token.attrSet('rel', 'nofollow');
+		}
+	});
 
 	return true;
 };
