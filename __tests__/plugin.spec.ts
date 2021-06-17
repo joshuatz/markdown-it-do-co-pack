@@ -5,7 +5,7 @@
 import { normalize } from 'path';
 import { readdir, readFile } from 'fs-extra';
 import MarkdownIt = require('markdown-it');
-import DoAuthoringMdItPlugin from '../src';
+import DoAuthoringMdItPlugin, { DoPluginOptions } from '../src';
 import assert = require('assert');
 
 const FIXTURES_DIR_PATH = normalize(`${__dirname}/fixtures`);
@@ -16,9 +16,11 @@ const getAbsPath = (filename: string) => {
 
 // Initialize
 const mdItInstance = new MarkdownIt();
-mdItInstance.use(DoAuthoringMdItPlugin);
+mdItInstance.use<DoPluginOptions>(DoAuthoringMdItPlugin, {
+	rules: 'all',
+});
 
-describe.skip('Tests entire plugin', async () => {
+describe('Tests entire plugin', async () => {
 	const testFiles = await readdir(FIXTURES_DIR_PATH);
 	testFiles.forEach(async (filename) => {
 		if (/-input\.md$/.test(filename)) {

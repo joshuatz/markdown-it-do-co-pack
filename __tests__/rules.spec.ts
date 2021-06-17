@@ -4,8 +4,7 @@
 
 import MarkdownIt = require('markdown-it');
 import assert = require('assert');
-import { applyLowLevelDefaults, DoAuthoringMdItPlugin, NotesRule, Rules } from '../src';
-import { FencedCodeBlockRule, ParagraphsRule, VariableHighlightRule } from '../src/special-rules';
+import { applyLowLevelDefaults, RulesByName } from '../src';
 // @ts-ignore
 import Superscript = require('markdown-it-sup');
 
@@ -26,7 +25,11 @@ function checkRenders(
 				try {
 					assert.strictEqual(rendered, c.expected + '\n');
 				} catch (secondErr) {
-					throw firstErr;
+					try {
+						assert.strictEqual(rendered + '\n', c.expected);
+					} catch (thirdErr) {
+						throw firstErr;
+					}
 				}
 			} else {
 				throw firstErr;
@@ -49,8 +52,31 @@ describe('Tests Individual Rules', () => {
 		reset();
 	});
 
-	describe('Tests paragraph rules', () => {
-		it.skip('should handle paragraphs, and related spacing', () => {
+	describe('Tests regular text', () => {
+		it('should render a paragraph', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: 'Hello',
+					expected: '<p>Hello</p>\n',
+				},
+				// Special chars
+				{
+					input: "abc 👨‍💻 \"test\" *^% (R)(r)(C)(P)(tm)(p)'' he(R)llo& alskjfd\"text\"ajsfdd ''single quote wrapped''",
+					expected:
+						'<p>abc 👨‍💻 &ldquo;test&rdquo; *^% &reg;&reg;&copy;(P)&trade;(p)&ldquo; he&reg;llo&amp; alskjfd&quot;text&quot;ajsfdd &rsquo;&lsquo;single quote wrapped&rdquo;</p>\n\n',
+				},
+			]);
+		});
+	});
+
+	describe('Tests spacing rule', () => {
+		beforeEach(() => {
+			const rule = RulesByName.do_spacing;
+			mdItInstance.use((md) => {
+				md.core.ruler.push(rule.name, rule.ruleFn);
+			});
+		});
+		it('should handle paragraphs, and related spacing', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: 'paragraph one\n\nparagraph two\nno break here\n\n- list\n\nanother paragraph',
@@ -62,12 +88,28 @@ describe('Tests Individual Rules', () => {
 	});
 
 	describe('Tests headline rules', () => {
-		it.skip('should handle headings', () => {
+		beforeEach(() => {
+			const SpacingRule = RulesByName.do_spacing;
+			const HeadingsRule = RulesByName.do_headings;
+			mdItInstance.core.ruler.push(HeadingsRule.name, HeadingsRule.ruleFn);
+			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
+		});
+		it('should handle headings', () => {
 			checkRenders(mdItInstance, [
+				// Special chars
 				{
 					input: '# Title (H1)\nText\n## Sub-Section (H2)\n- List',
 					expected:
 						'<h1 id="title-h1">Title (H1)</h1>\n\n<p>Text</p>\n\n<h2 id="sub-section-h2">Sub-Section (H2)</h2>\n\n<ul>\n<li>List</li>\n</ul>\n\n',
+				},
+				{
+					input: '### 🚌 _"',
+					expected: '<h3 id="🚌-_-quot">🚌 _&ldquo;</h3>\n\n',
+				},
+				{
+					input: '### Special - chars — 🚨 !@#$%^*()-+=_—~`"\'',
+					expected:
+						'<h3 id="special-chars-—-🚨-_—-quot-39">Special - chars — 🚨 !@#$%^*()-+=_—~`&ldquo;&rsquo;</h3>\n\n',
 				},
 			]);
 		});
@@ -76,7 +118,8 @@ describe('Tests Individual Rules', () => {
 	describe('Tests notes rule', () => {
 		beforeEach(() => {
 			mdItInstance.use((md) => {
-				md.core.ruler.push('do_notes', NotesRule);
+				const rule = RulesByName.do_notes;
+				md.core.ruler.push(rule.name, rule.ruleFn);
 			});
 		});
 
@@ -93,7 +136,8 @@ describe('Tests Individual Rules', () => {
 	describe('Tests variable highlighting rule', () => {
 		beforeEach(() => {
 			mdItInstance.use((md) => {
-				md.core.ruler.push('do_variable_highlights', VariableHighlightRule);
+				const rule = RulesByName.do_variable_highlights;
+				md.core.ruler.push(rule.name, rule.ruleFn);
 			});
 		});
 
@@ -137,7 +181,8 @@ describe('Tests Individual Rules', () => {
 	describe('Tests code fence rule', () => {
 		beforeEach(() => {
 			mdItInstance.use((md) => {
-				md.core.ruler.push('do_code_blocks', FencedCodeBlockRule);
+				const rule = RulesByName.do_code_blocks;
+				md.core.ruler.push(rule.name, rule.ruleFn);
 			});
 		});
 

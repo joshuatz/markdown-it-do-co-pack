@@ -44,3 +44,95 @@ export function SpanWrapVars(text: string) {
 	});
 	return text;
 }
+
+/**
+ * This is basically DO-flavored HTML escaping
+ *  - Be careful not to call escapeHtml on the text returned by this, or else you will end up with double escaped entities (since this returns `&` as part of HTML encoding)
+ */
+export function docoFlavoredReplacer(input: string) {
+	let output = input;
+	const specialCharReplacements: Array<{
+		find: string | RegExp;
+		replace: string | ((substring: string, ...args: any[]) => string);
+	}> = [
+		// RUN THESE FIRST
+		{
+			find: /&/g,
+			replace: '&amp;',
+		},
+		{
+			find: /</g,
+			replace: '&lt;',
+		},
+		{
+			find: />/g,
+			replace: '&gt;',
+		},
+		// ... then everything else
+		// Special quote replacement
+		// DO tries to find pairs first, replacing with fancy quotes, then falls back to regular doubles
+		{
+			find: /“|[\r\n ]"[^\r\n ]|"$|"'$/g,
+			replace: (substring) => {
+				return substring.replace(/[“"]|''/g, '&ldquo;');
+			},
+		},
+		{
+			find: /”|[^\r\n ]"[\r\n ]/g,
+			replace: (substring) => {
+				return substring.replace(/[”"]|''/g, '&rdquo;');
+			},
+		},
+		// This doesn't really make sense, but they are using ldquo for double single quotes on the *RIGHT* side...
+		{
+			find: /[^\r\n ]''[\r\n ]/g,
+			replace: (substring) => {
+				return substring.replace(/''/g, '&ldquo;');
+			},
+		},
+		// ... and, if a pair of singles shows up on the left, it is replaced by right single and then left single...
+		{
+			find: /[\r\n ]''[^\r\n ]/g,
+			replace: (substring) => {
+				return substring.replace(/''/g, '&rsquo;&lsquo;');
+			},
+		},
+		// ... and if a pair of singles is last, then rdquo instead of left single or left double
+		{
+			find: /''$/g,
+			replace: '&rdquo;',
+		},
+		// ... and if a single single is last, then rsquo
+		{
+			find: /[^']+'$/g,
+			replace: (substring) => {
+				return substring.replace(/'/g, '&rsquo;');
+			},
+		},
+		// Here is the double quote fallback, if nothing prior matched
+		{
+			find: /"/g,
+			replace: '&quot;',
+		},
+		// Symbol shorthand (e.g. registered, trademark, etc.)
+		{
+			find: /\(R\)/gi,
+			replace: '&reg;',
+		},
+		{
+			find: /\(C\)/gi,
+			replace: '&copy;',
+		},
+		{
+			find: /\(TM\)/gi,
+			replace: '&trade;',
+		},
+	];
+
+	specialCharReplacements.forEach((c) => {
+		// @ts-ignore
+		output = output.replace(c.find, c.replace);
+	});
+
+	return output;
+}

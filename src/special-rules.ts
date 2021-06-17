@@ -1,5 +1,7 @@
-import { Rule } from './types';
+import type { AnchorOptions } from 'markdown-it-anchor';
+import { MarkdownIt, Rule } from './types';
 import { getHtmlBlock, getNewLineToken, SpanWrapVars, tokenRecurser } from './utils';
+import MarkdownItAnchor = require('markdown-it-anchor');
 
 /**
  * This rule handles inline notes
@@ -53,22 +55,19 @@ export const NotesRule: Rule = (state) => {
 
 export const VariableHighlightRule: Rule = (state) => {
 	const patt = /(.*)<\^>(.+?)<\^>(.*)/;
-	const { tokens } = state;
-	// console.log({ tokens });
 
 	// There are a couple main ways that these tokens can show up, depending on
 	// how they are used in the original markdown
 
-	tokenRecurser(state, (currTopToken, currIndex, tokenArr) => {
+	tokenRecurser(state, (token, index, tokenArr) => {
 		// In plain text areas (not code fences or inline), they will be put
 		// into a single `inline` token, with either 1 child:
 		// ['text'], content = `'Alpha <^>Bravo<^> Charlie!'`
 		// Or, if using the `superscript` plugin, possibly 5 children
 		// --> ['text', 'sup_open', 'text', 'sup_close', 'text']
 		// --> [any preceding text + `<`, `^`, `>MyVarString<`, `^`, `>` + any closing text]
-		if (currTopToken.type === 'inline' && currTopToken.children) {
-			const { children } = currTopToken;
-			// console.log(children);
+		if (token.type === 'inline' && token.children) {
+			const { children } = token;
 			if (
 				children.length === 1 &&
 				children[0].type === 'text' &&
@@ -85,7 +84,6 @@ export const VariableHighlightRule: Rule = (state) => {
 			} else {
 				// Match `>varNameStr<`
 				const innerTextPatt = /^>(.*)<$/;
-				// console.log(children);
 				for (let ci = 0; ci < children.length; ci++) {
 					const child = children[ci];
 					// The 5 children scenario
@@ -123,16 +121,16 @@ export const VariableHighlightRule: Rule = (state) => {
 		}
 
 		// This is for inline code blocks, NOT fenced
-		if (currTopToken.type === 'code_inline') {
+		if (token.type === 'code_inline') {
 			// A little more complicated than just outright string replacement
 			// In order to not have MDIT escape out <span>, we have to change
 			// to raw HTML block, and recompose <code></code> entirely within it
 			// Note: We don't have to search for and remove <code></code> delims,
 			// since token type `code_inline` omits them from `.content`
-			tokenArr[currIndex] = getHtmlBlock(
+			tokenArr[index] = getHtmlBlock(
 				state,
-				currTopToken.nesting,
-				`<code>${SpanWrapVars(currTopToken.content)}</code>`
+				token.nesting,
+				`<code>${SpanWrapVars(token.content)}</code>`
 			);
 		}
 
@@ -148,7 +146,6 @@ export const FencedCodeBlockRule: Rule = (state) => {
 	const { escapeHtml } = state.md.utils;
 	tokenRecurser(state, (token, index, tokenArr) => {
 		if (token.type === 'fence' && token.tag === 'code') {
-			// console.log({ codeToken: token });
 			const labels: {
 				primary: null | string;
 				secondary: null | string;
@@ -262,8 +259,6 @@ export const FencedCodeBlockRule: Rule = (state) => {
 					renderCode;
 			}
 
-			// console.log({ renderCode });
-
 			tokenArr[index] = getHtmlBlock(state, token.nesting, renderCode);
 		}
 	});
@@ -271,16 +266,102 @@ export const FencedCodeBlockRule: Rule = (state) => {
 	return true;
 };
 
-export const ParagraphsRule: Rule = (state) => {
+/**
+ * This rule affects line breaks / spacing between elements, and comes with a few caveats
+ *  - It is not really necessary, as the browser doesn't really care about spacing between elements
+ *  - It should always come last, since spacing is highly dependent on what tokens are next to each other
+ *  - This could probably be optimized further
+ */
+export const SpacingRule: Rule = (state) => {
 	// We could hook into a lower-level rule, but this approach here does not require
 	// precise ordering of hooks or relying on named rules
 	tokenRecurser(state, (token, index, tokenArr) => {
-		if (token.type === 'paragraph_close') {
-			// DO uses an extra line break after paragraph tags
-			// In actuality, this doesn't impact UI, since the DOM doesn't really care about this
+		// DO uses an extra line break after certain tags...
+		const addAfterTagTypes = [
+			'paragraph_close',
+			'softbreak',
+			'bullet_list_close',
+			'heading_close',
+		];
+		// ...but, not if certain tags follow
+		const skipBeforeTypes = ['list_item_close'];
+		if (addAfterTagTypes.includes(token.type)) {
+			if (tokenArr[index + 1] && skipBeforeTypes.includes(tokenArr[index + 1].type)) {
+				return;
+			}
+
 			tokenArr.splice(index, 1, token, getNewLineToken(state, token.nesting));
 		}
 	});
+
+	return true;
+};
+
+export const HeadingsRule: Rule = (state) => {
+	// Anchor transformation (e.g. `## Section -> <h2 id="section">Section</h2>)
+	const anchorOptions: AnchorOptions & { tabIndex?: boolean } = {
+		tabIndex: false,
+		slugify: function (slug) {
+			// Warning: Order is pretty important for several steps
+			/**
+			 * These characters are immediately stripped, without replacement
+			 */
+			const strippedChars = ['!', '@', '#', '$', '%', '^', '*', '(', ')', '+', '=', '~', '`'];
+			const specialCharReplacements = [
+				{
+					find: /&/g,
+					replace: `-amp`,
+				},
+				{
+					find: /"/g,
+					replace: `-quot`,
+				},
+				{
+					find: /'/g,
+					replace: `-39`,
+				},
+			];
+			specialCharReplacements.forEach((c) => {
+				slug = slug.replace(c.find, c.replace);
+			});
+			slug = slug
+				.split('')
+				.map((c) => {
+					if (strippedChars.includes(c)) {
+						return '';
+					}
+					return c;
+				})
+				.join('');
+			// Replace single spaced sep with just sep
+			slug = slug.replace(/ - /g, '-');
+			// Lowercase
+			slug = slug.toLowerCase();
+			// Replace spaces with dashes
+			slug = slug.replace(/[ ]{1,}/g, '-');
+			// Multiple dashes are collapsed / combined
+			slug = slug.replace(/-{2,}/g, '-');
+			return slug;
+		},
+	};
+
+	/**
+	 * This is _not_ how to normally add rules, but some tricky stuff is needed since I'm piggybacking a third-party rule onto my own.
+	 *  - This is a mock of the MarkdownIt instance
+	 *  - If I were to load the MarkdownItAnchor plugin via state.md.use, or even state.md.core.ruler.push, it would end up in a state where anchor pushes its rule the stack, but due to loading order, doesn't get called with the correct token chain
+	 */
+	const Interceptor = {
+		core: {
+			ruler: {
+				push: (name: string, callback: Rule) => {
+					callback(state);
+				},
+			},
+		},
+	};
+	MarkdownItAnchor(Interceptor as MarkdownIt, anchorOptions);
+
+	// Actual heading text content is handled through text renderer
 
 	return true;
 };

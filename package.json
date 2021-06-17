@@ -4,7 +4,8 @@
 	"description": "",
 	"main": "dist/index.js",
 	"scripts": {
-		"test": "mocha \"./__tests__/**/*.spec.ts\""
+		"test": "mocha \"./__tests__/**/*.spec.ts\"",
+		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\""
 	},
 	"keywords": [],
 	"author": "",
