@@ -1,0 +1,98 @@
+<h1 id="level-1-heading-welcome-to-the-test-fixture">Level 1 Heading - Welcome to the Test Fixture!</h1>
+
+<h2 id="text">Text</h2>
+
+<p>Here is a regular paragraph.</p>
+
+<p>Let&rsquo;s try some more complex text: !@#$()^<em>~+</em>)&amp;)*!^@%. 😀✨📄🚨🎉</p>
+
+<p>And how about formatting. We can have <em>italics</em>, (<em>neat</em>), <strong>bold</strong>, or even ~~strikethrough~~.</p>
+
+<h3 id="blockquotes">Blockquotes</h3>
+
+<p>I really like blockquotes - they feel like a very natural way to indicate notes in native Markdown, especially since they get turned into native HTML <code>&lt;blockquote&gt;</code> elements, which is understood by browsers and provides indentation right out of the box.</p>
+
+<blockquote>
+<p>Here is a blockquote example.</p>
+</blockquote>
+
+<h2 id="links">Links</h2>
+
+<p>Here is an <a href="https://joshuatz.com/" rel="nofollow">inline link</a>, and the same, [but without the protocol](joshuatz.com).</p>
+
+<p>Here are some links in a list:</p>
+
+<ul>
+<li><a href="https://joshuatz.com/" rel="nofollow">Portfolio site</a></li>
+<li><a href="https://www.google.com/" rel="nofollow">Google</a></li>
+<li><a href="https://www.bing.com/" rel="nofollow">Bing</a></li>
+<li>[Bing without protocol](bing.com)</li>
+<li><a href="http://www.example.com" rel="nofollow">Non-https site</a></li>
+</ul>
+
+<p>And how about this - a URL pasted without the MD link syntax: <a href="https://www.google.com/" rel="nofollow">https://www.google.com/</a>.</p>
+
+<p>And here are some more URLs, without MD link syntax, AND without protocol: <a href="http://www.google.com" rel="nofollow">www.google.com</a> &amp; google.com.</p>
+
+<p>Or how about this, a link to another section within this page: <a href="#text" rel="nofollow">Text Section</a></p>
+
+<h2 id="code">Code</h2>
+
+<p>There are a few different ways to embed code into Markdown files. You can use inline code formatting, like <code>$this</code>, or a separated code block (sometimes called a <em>fenced</em> code block), using triple backticks to start and stop:</p>
+<pre class="code-pre "><code>hello from a code block!
+</code></pre>
+<p>You can also indicate the (coding) language used within the code block by placing the language specifier (e.g. <code>js</code>) on the right side of the three opening backticks:</p>
+<pre class="code-pre "><code class="code-highlight language-js">console.log("Hello from JS");
+</code></pre>
+<h2 id="special-do-formatting">Special DO Formatting</h2>
+
+<p>DO supports some special syntax within MD that is their own flavor - not part of the baseline MD specs.</p>
+
+<h3 id="notes">Notes</h3>
+
+<p>Here are some examples:</p>
+
+<p><span class='note'><strong>Note:</strong> Use this for notes on a publication.<br></span></p>
+
+<p><span class='warning'><strong>Warning:</strong> Use this to warn users.<br></span></p>
+
+<p><span class='info'><strong>Info:</strong> Use this for product information.<br></span></p>
+
+<p><span class='draft'><strong>Draft:</strong> Use this for notes in a draft publication.<br></span></p>
+
+<h3 id="variable-highlighting">Variable Highlighting</h3>
+
+<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say that any text enclosed within a special delimiter set gets highlighted, indicating the value is dynamic, and/or should be changed by the reader.</p>
+
+<p>The delimiters are <code>&lt;^&gt;</code>, on both sides.</p>
+
+<p>An inline plain text example is <span class="highlight">this</span>, or you can do inline code, <code>like <span class="highlight">this</span>...</code>,  or even within code blocks:</p>
+<pre class="code-pre "><code class="code-highlight language-js">const myName = '<span class="highlight">Joshua</span>';
+</code></pre>
+<h3 id="code-labels">Code Labels</h3>
+
+<p>Code labels in DO Markdown are a way to indicate to the reader extra contextual information about the code they are seeing, perhaps the filename it normally corresponds to.</p>
+
+<p>There are regular labels (I call these <em>primary</em> labels), or <em>secondary</em> labels.</p>
+
+<p>Here is a primary label:</p>
+<div class="code-label " title="main.js">main.js</div><pre class="code-pre "><code class="code-highlight language-js">alert('You are in main.js');
+</code></pre>
+<p>Here is a secondary label:</p>
+<pre class="code-pre "><code><div class="secondary-code-label " title="Console Output">Console Output</div>VM1059:1 Uncaught ReferenceError: myVar is not defined
+</code></pre>
+<p>And here is both together (this is permitted):</p>
+<div class="code-label " title="server/index.php">server/index.php</div><pre class="code-pre "><code class="code-highlight language-php"><div class="secondary-code-label " title="checkRights">checkRights</div>function checkRights($user) {
+    //
+}
+</code></pre>
+<h3 id="code-commands">Code Commands</h3>
+
+<p>For showing terminal / shell input and output to the reader, DO supports some extra formatting and syntax, through command indicators. These typically set the default language of the code block to <code>bash</code>, and add the correct prefix in front of your commands.</p>
+
+<p>Here are some examples:</p>
+<pre class="code-pre command prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="$">sudo systemctl reload apache2
+</li></ul></code></pre><pre class="code-pre super_user prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="#">echo "Hello from SU!"
+</li></ul></code></pre><pre class="code-pre custom_prefix prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="node&gt;">1 + 1
+</li><li class="line" data-prefix="node&gt;">&gt; 2
+</li></ul></code></pre>

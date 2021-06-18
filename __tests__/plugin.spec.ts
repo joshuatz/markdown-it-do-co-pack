@@ -2,10 +2,10 @@
  * @file These tests should cover the entire plugin, and cover the intersection of multiple rules working together
  */
 
+import { readdir, readFile, writeFile } from 'fs-extra';
 import { normalize } from 'path';
-import { ensureDir, readdir, readFile, writeFile } from 'fs-extra';
-import MarkdownIt = require('markdown-it');
 import DoAuthoringMdItPlugin, { DoPluginOptions } from '../src';
+import MarkdownIt = require('markdown-it');
 import assert = require('assert');
 
 const DEBUG_DIR_PATH = normalize(`${__dirname}/../debug-out`);
@@ -26,7 +26,7 @@ describe('Tests entire plugin', async () => {
 	const testFiles = await readdir(FIXTURES_DIR_PATH);
 	testFiles.forEach(async (filename) => {
 		if (/-input\.md$/.test(filename)) {
-			it.skip(`Should properly render test file ${filename}`, async () => {
+			it(`Should properly render test file ${filename}`, async () => {
 				const filenameBase = filename.replace('-input.md', '');
 				const inputFileContents = (await readFile(getAbsPath(filename))).toString();
 				const expectedOutFilePath = getAbsPath(`${filenameBase}-expected.txt`);
@@ -35,10 +35,12 @@ describe('Tests entire plugin', async () => {
 				try {
 					assert.strictEqual(rendered, expectedOutFileContents);
 				} catch (e) {
-					await writeFile(
-						normalize(`${DEBUG_DIR_PATH}/${filenameBase}-render.html`),
-						rendered
-					);
+					if (process.env['DEBUG_OUT']) {
+						await writeFile(
+							normalize(`${DEBUG_DIR_PATH}/${filenameBase}-render.html`),
+							rendered
+						);
+					}
 					throw e;
 				}
 			});

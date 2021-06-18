@@ -1,6 +1,14 @@
 import type { AnchorOptions } from 'markdown-it-anchor';
-import { MarkdownIt, Rule } from './types';
-import { getHtmlBlock, getNewLineToken, SpanWrapVars, tokenRecurser } from './utils';
+import { MarkdownIt, Rule, Token } from './types';
+import {
+	codeBlockEscape,
+	docoEscape,
+	getHtmlBlock,
+	getIsRuleEnabled,
+	getNewLineToken,
+	processTextForVars,
+	tokenRecurser,
+} from './utils';
 import MarkdownItAnchor = require('markdown-it-anchor');
 
 /**
@@ -54,10 +62,27 @@ export const NotesRule: Rule = (state) => {
 };
 
 export const VariableHighlightRule: Rule = (state) => {
-	const patt = /(.*)<\^>(.+?)<\^>(.*)/;
+	// NOTE: not using /g to avoid index changing with .test()
+	const patt = /(.*)<\^>(.+?)<\^>(.*)/m;
 
 	// There are a couple main ways that these tokens can show up, depending on
 	// how they are used in the original markdown
+
+	function processTextToken(token: Token): Token {
+		if (patt.test(token.content)) {
+			return getHtmlBlock(
+				state,
+				token.nesting,
+				processTextForVars({
+					text: token.content,
+					nonVarTextProcessor: docoEscape,
+					varTextProcessor: docoEscape,
+				})
+			);
+		}
+
+		return token;
+	}
 
 	tokenRecurser(state, (token, index, tokenArr) => {
 		// In plain text areas (not code fences or inline), they will be put
@@ -73,14 +98,8 @@ export const VariableHighlightRule: Rule = (state) => {
 				children[0].type === 'text' &&
 				patt.test(children[0].content)
 			) {
-				const [full, pre, varStr, post] = children[0].content.match(patt)!;
 				// Child will be replaced by HTML block
-				const replacementToken = getHtmlBlock(
-					state,
-					children[0].nesting,
-					`${pre}<span class="highlight">${varStr}</span>${post}`
-				);
-				children[0] = replacementToken;
+				children[0] = processTextToken(children[0]);
 			} else {
 				// Match `>varNameStr<`
 				const innerTextPatt = /^>(.*)<$/;
@@ -120,9 +139,9 @@ export const VariableHighlightRule: Rule = (state) => {
 			}
 		}
 
-		if (token.type === 'text') {
+		if (token.type === 'text' && patt.test(token.content)) {
 			// Have to use HTML block to avoid MDIT escaping out <span>
-			tokenArr[index] = getHtmlBlock(state, token.nesting, SpanWrapVars(token.content));
+			tokenArr[index] = processTextToken(token);
 		}
 
 		// This is for inline code blocks, NOT fenced
@@ -130,12 +149,16 @@ export const VariableHighlightRule: Rule = (state) => {
 			// A little more complicated than just outright string replacement
 			// In order to not have MDIT escape out <span>, we have to change
 			// to raw HTML block, and recompose <code></code> entirely within it
-			// Note: We don't have to search for and remove <code></code> delims,
+			// Note: We don't have to search for and remove <code></code> delimiters,
 			// since token type `code_inline` omits them from `.content`
 			tokenArr[index] = getHtmlBlock(
 				state,
 				token.nesting,
-				`<code>${SpanWrapVars(token.content)}</code>`
+				`<code>${processTextForVars({
+					text: token.content,
+					varTextProcessor: state.md.utils.escapeHtml,
+					nonVarTextProcessor: state.md.utils.escapeHtml,
+				})}</code>`
 			);
 		}
 
@@ -148,7 +171,7 @@ export const VariableHighlightRule: Rule = (state) => {
 };
 
 export const FencedCodeBlockRule: Rule = (state) => {
-	const { escapeHtml } = state.md.utils;
+	const spacingRuleIsActive = getIsRuleEnabled(state.md, 'do_spacing');
 	tokenRecurser(state, (token, index, tokenArr) => {
 		if (token.type === 'fence' && token.tag === 'code') {
 			const labels: {
@@ -230,12 +253,17 @@ export const FencedCodeBlockRule: Rule = (state) => {
 				// Wrap all lines in custom `<ul><li></li></ul>`
 				// To have complete parity with the MD preview tool, line breaks are a little odd
 				// it breaks them right before closing tags, so `<ul><li>line 1\n</li><li>line 2\n</li></ul>
-				const liOpenHtml = `<li class="line" data-prefix="${escapeHtml(commandPrefix)}">`;
-				processedCodeLines[0] = `<ul class="prefixed">${liOpenHtml}${processedCodeLines[0]}`;
+				const liOpenHtml = `<li class="line" data-prefix="${
+					commandPrefix === '>' ? commandPrefix : codeBlockEscape(commandPrefix)
+				}">`;
+
+				processedCodeLines[0] = `<ul class="prefixed">${liOpenHtml}${codeBlockEscape(
+					processedCodeLines[0]
+				)}`;
 				processedCodeLines.forEach((line, index) => {
 					// Looks like empty lines are preserved if they come in-between other command lines
 					if (index > 0 && (index !== processedCodeLines.length - 1 || line.length)) {
-						processedCodeLines[index] = `</li>${liOpenHtml}${line}`;
+						processedCodeLines[index] = `</li>${liOpenHtml}${codeBlockEscape(line)}`;
 					}
 				});
 				// Close out final list item, and entire list, inline with code closing tags
@@ -244,7 +272,9 @@ export const FencedCodeBlockRule: Rule = (state) => {
 
 			// Make sure to catch and span wrap <^>varString<^> blocks
 			// and also make sure only one line break between code end and </code> tag
-			let rawInnerCode = SpanWrapVars(processedCodeLines.join('\n')).trimEnd();
+			let rawInnerCode = processTextForVars({
+				text: processedCodeLines.join('\n'),
+			}).trimEnd();
 
 			if (labels.secondary) {
 				// secondary label is actually inserted directly inside <code>
@@ -258,7 +288,20 @@ export const FencedCodeBlockRule: Rule = (state) => {
 			if (lang) {
 				codeOpenBlock = `<code class="code-highlight language-${lang}">`;
 			}
-			let renderCode = `${preOpenBlock}${codeOpenBlock}${rawInnerCode}\n${extraStringBeforeClosingCodeTags}</code></pre>\n`;
+
+			// With strict DO spacing rules, there is no `\n` between adjacent code blocks
+			let hasFinalLineBreak = true;
+			if (
+				spacingRuleIsActive &&
+				tokenArr[index + 1] &&
+				tokenArr[index + 1].type === 'fence'
+			) {
+				hasFinalLineBreak = false;
+			}
+
+			let renderCode = `${preOpenBlock}${codeOpenBlock}${rawInnerCode}\n${extraStringBeforeClosingCodeTags}</code></pre>${
+				hasFinalLineBreak ? '\n' : ''
+			}`;
 
 			if (labels.primary) {
 				// Primary label is inserted before entire rest of code, outside
@@ -291,11 +334,15 @@ export const SpacingRule: Rule = (state) => {
 			'softbreak',
 			'bullet_list_close',
 			'heading_close',
+			'blockquote_close',
 		];
+
 		// ...but, not if certain tags follow
-		const skipBeforeTypes = ['list_item_close', 'html_block', 'fence'];
+		const skipBeforeTypes = ['list_item_close', 'html_block', 'fence', 'blockquote_close'];
+
 		// ... although adds extra if certain tags follow
 		const addExtraBeforeTypes: string[] = ['paragraph_open'];
+
 		if (addAfterTagTypes.includes(token.type)) {
 			let nextToken = tokenArr[index + 1];
 			if (nextToken && skipBeforeTypes.includes(nextToken.type)) {
@@ -310,6 +357,8 @@ export const SpacingRule: Rule = (state) => {
 				tokenArr.splice(index + 1, 0, getNewLineToken(state, token.nesting));
 			}
 		}
+
+		// Note: There is an additional spacing rule not processed here - see fenced code block rule and final line break
 	});
 
 	return true;

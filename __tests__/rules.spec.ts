@@ -55,7 +55,7 @@ describe('Tests Individual Rules', () => {
 			const SpacingRule = RulesByName.do_spacing;
 			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
 		});
-		it.skip('should render a paragraph', () => {
+		it('should render a paragraph', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: 'Hello',
@@ -79,12 +79,35 @@ describe('Tests Individual Rules', () => {
 			]);
 		});
 
+		// I honestly don't think this should be honored / implemented
+		// It would take a lot of work to implement (hard to override MDIT's use of trim(), since it is deeply nested here - https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/rules_block/paragraph.js#L35
+		// Furthermore, this doesn't really have a practical effect - paragraphs are block level elements, and even if you make them inline, the browser collapses whitespace on the ends anyways
+		it.skip('should not trim paragraph ends', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: 'I have a trailing space ',
+					expected:
+						'<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say </p>\n\n',
+				},
+			]);
+		});
+
 		it(`should escape based on DO's rules`, () => {
 			checkRenders(mdItInstance, [
 				{
-					input: "<div>Hello</div>\n\n<script>alert('Hello!');</script>\n\n😀✨",
+					input: "<div>Hello</div>\n\n<script>console.info('Hello!');</script>\n\n😀✨",
 					expected:
-						'<p>&lt;div&gt;Hello&lt;/div&gt;</p>\n\n<p>&lt;script&gt;alert(&lsquo;Hello!&rsquo;);&lt;/script&gt;</p>\n\n<p>😀✨</p>\n\n',
+						'<p>&lt;div&gt;Hello&lt;/div&gt;</p>\n\n<p>&lt;script&gt;console.info(&lsquo;Hello!&rsquo;);&lt;/script&gt;</p>\n\n<p>😀✨</p>\n\n',
+				},
+			]);
+		});
+
+		it(`should handle mixed formatting, like bold and italic`, () => {
+			checkRenders(mdItInstance, [
+				{
+					input: `DO supports _"variable highlighting"_, which is to say`,
+					expected:
+						'<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say</p>\n\n',
 				},
 			]);
 		});
@@ -92,17 +115,32 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests spacing rule', () => {
 		beforeEach(() => {
-			const rule = RulesByName.do_spacing;
-			mdItInstance.use((md) => {
-				md.core.ruler.push(rule.name, rule.ruleFn);
-			});
+			mdItInstance.core.ruler.push(
+				RulesByName.do_spacing.name,
+				RulesByName.do_spacing.ruleFn
+			);
+			mdItInstance.core.ruler.push(
+				RulesByName.do_code_blocks.name,
+				RulesByName.do_code_blocks.ruleFn
+			);
 		});
+
 		it('should handle paragraphs, and related spacing', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: 'paragraph one\n\nparagraph two\nno break here\n\n- list\n\nanother paragraph',
 					expected:
 						'<p>paragraph one</p>\n\n<p>paragraph two<br>\nno break here</p>\n\n<ul>\n<li>list</li>\n</ul>\n\n<p>another paragraph</p>\n\n',
+				},
+			]);
+		});
+
+		it('should not place breaks between adjacent code blocks', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: '```\nblock 1\n```\n```\nblock 2\n```',
+					expected:
+						'<pre class="code-pre "><code>block 1\n</code></pre><pre class="code-pre "><code>block 2\n</code></pre>\n',
 				},
 			]);
 		});
@@ -262,9 +300,9 @@ describe('Tests Individual Rules', () => {
 		it('should handle "primary" DO "labels" inside fenced code blocks', () => {
 			checkRenders(mdItInstance, [
 				{
-					input: '```js\n[label /home/joshua/test.js]\nasync function run() {\n    console.log("hello");\n}\nrun().then(process.exit(0));\n```',
+					input: '```js\n[label /home/joshua/test.js]\nasync function run() {\n    console.info("hello");\n}\nrun().then(process.exit(0));\n```',
 					expected:
-						'<div class="code-label " title="/home/joshua/test.js">/home/joshua/test.js</div><pre class="code-pre "><code class="code-highlight language-js">async function run() {\n    console.log("hello");\n}\nrun().then(process.exit(0));\n</code></pre>\n',
+						'<div class="code-label " title="/home/joshua/test.js">/home/joshua/test.js</div><pre class="code-pre "><code class="code-highlight language-js">async function run() {\n    console.info("hello");\n}\nrun().then(process.exit(0));\n</code></pre>\n',
 				},
 			]);
 		});
@@ -272,9 +310,9 @@ describe('Tests Individual Rules', () => {
 		it('should handle "secondary" DO "labels" inside fenced code blocks', () => {
 			checkRenders(mdItInstance, [
 				{
-					input: '```ts\n[secondary_label main]\nfunction main() {\n  const str: string = "hello";\n  console.log(str);\n}\n```',
+					input: '```ts\n[secondary_label main]\nfunction main() {\n  const str: string = "hello";\n  console.info(str);\n}\n```',
 					expected:
-						'<pre class="code-pre "><code class="code-highlight language-ts"><div class="secondary-code-label " title="main">main</div>function main() {\n  const str: string = "hello";\n  console.log(str);\n}\n</code></pre>\n',
+						'<pre class="code-pre "><code class="code-highlight language-ts"><div class="secondary-code-label " title="main">main</div>function main() {\n  const str: string = "hello";\n  console.info(str);\n}\n</code></pre>\n',
 				},
 			]);
 		});
@@ -292,9 +330,9 @@ describe('Tests Individual Rules', () => {
 			checkRenders(mdItInstance, [
 				// Ordered correctly
 				{
-					input: '```js\n[label C:\tempalpha_bravo.js]\n[secondary_label Main]\n// Code comment\nfunction main() {\n  console.log("test");\n}\n```',
+					input: '```js\n[label C:\tempalpha_bravo.js]\n[secondary_label Main]\n// Code comment\nfunction main() {\n  console.info("test");\n}\n```',
 					expected:
-						'<div class="code-label " title="C:\tempalpha_bravo.js">C:\tempalpha_bravo.js</div><pre class="code-pre "><code class="code-highlight language-js"><div class="secondary-code-label " title="Main">Main</div>// Code comment\nfunction main() {\n  console.log("test");\n}\n</code></pre>\n',
+						'<div class="code-label " title="C:\tempalpha_bravo.js">C:\tempalpha_bravo.js</div><pre class="code-pre "><code class="code-highlight language-js"><div class="secondary-code-label " title="Main">Main</div>// Code comment\nfunction main() {\n  console.info("test");\n}\n</code></pre>\n',
 				},
 				// Ordered incorrectly, but should still be handled correctly
 				{
@@ -304,9 +342,9 @@ describe('Tests Individual Rules', () => {
 				},
 				// Both ordered incorrectly, and user tried to add more than one of each label type!
 				{
-					input: '```js\n[secondary_label Hello]\n[seconary_label render raw]\n[label C:\temp\test.js]\nfunction main() {\n  console.log("test");\n}\n```',
+					input: '```js\n[secondary_label Hello]\n[seconary_label render raw]\n[label C:\temp\test.js]\nfunction main() {\n  console.info("test");\n}\n```',
 					expected:
-						'<div class="code-label " title="C:\temp\test.js">C:\temp\test.js</div><pre class="code-pre "><code class="code-highlight language-js"><div class="secondary-code-label " title="Hello">Hello</div>[seconary_label render raw]\nfunction main() {\n  console.log("test");\n}\n</code></pre>\n',
+						'<div class="code-label " title="C:\temp\test.js">C:\temp\test.js</div><pre class="code-pre "><code class="code-highlight language-js"><div class="secondary-code-label " title="Hello">Hello</div>[seconary_label render raw]\nfunction main() {\n  console.info("test");\n}\n</code></pre>\n',
 				},
 			]);
 		});
@@ -331,9 +369,9 @@ describe('Tests Individual Rules', () => {
 				// ```custom_prefix(mysql>)
 				// ```custom_prefix(node>)
 				{
-					input: '```custom_prefix(node>)\nconsole.log("test")\nconsole.log("hello");\n```',
+					input: '```custom_prefix(node>)\nconsole.info("test")\nconsole.info("hello");\n```',
 					expected:
-						'<pre class="code-pre custom_prefix prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="node&gt;">console.log("test")\n</li><li class="line" data-prefix="node&gt;">console.log("hello");\n</li></ul></code></pre>\n',
+						'<pre class="code-pre custom_prefix prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="node&gt;">console.info("test")\n</li><li class="line" data-prefix="node&gt;">console.info("hello");\n</li></ul></code></pre>\n',
 				},
 				// multi-line command block
 				{
