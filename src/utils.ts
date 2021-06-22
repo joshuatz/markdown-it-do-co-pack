@@ -272,6 +272,9 @@ export function docoEscape(input: string) {
 	return output;
 }
 
+/**
+ * Internal use - get all rules loaded in MDIT
+ */
 export function getAllRules(mditInstance: MarkdownIt) {
 	let allRules: Array<{
 		name: string;
@@ -289,6 +292,12 @@ export function getAllRules(mditInstance: MarkdownIt) {
 	return allRules;
 }
 
+/**
+ * Internal use - check if a rule is enabled
+ * @param mditInstance The instance of MarkdownIt
+ * @param ruleName The name that was used when loading into MDIT
+ * @param jsFnName The actual JavaScript function name of the rule.
+ */
 export function getIsRuleEnabled(mditInstance: MarkdownIt, ruleName: string, jsFnName?: string) {
 	const allRules = getAllRules(mditInstance);
 	for (const rule of allRules) {

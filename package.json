@@ -1,20 +1,52 @@
 {
 	"name": "markdown-it-do-co-pack",
 	"version": "1.0.0",
-	"description": "",
-	"main": "dist/index.js",
-	"scripts": {
-		"test": "mocha \"./__tests__/**/*.spec.ts\"",
-		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\""
+	"description": "A pack of Markdown-It rules for DigitalOcean Community content, also packaged as a plugin",
+	"type": "module",
+	"main": "dist/index.cjs",
+	"module": "dist/index.js",
+	"exports": {
+		"import": "./dist/index.js",
+		"require": "./dist/index.cjs"
 	},
-	"keywords": [],
-	"author": "",
+	"types": "./dist/index.d.ts",
+	"engines": {
+		"node": "^12.17.0 || ^14.13.1 || >=16.0.0"
+	},
+	"files": [
+		"dist/"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/joshuatz/markdown-it-do-co-pack.git"
+	},
+	"bugs": {
+		"url": "https://github.com/joshuatz/markdown-it-do-co-pack/issues"
+	},
+	"author": {
+		"name": "Joshua Tzucker",
+		"url": "https://joshuatz.com/?utm_source=package"
+	},
+	"homepage": "https://github.com/joshuatz/markdown-it-do-co-pack",
+	"keywords": [
+		"markdown-it",
+		"markdown-it-plugin",
+		"digitalocean",
+		"digital ocean"
+	],
 	"license": "MIT",
+	"scripts": {
+		"test:nocov": "mocha \"./__tests__/**/*.spec.ts\"",
+		"test": "nyc --reporter=lcov npm run test:nocov",
+		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\"",
+		"build": "tsup src/index.ts --dts --format esm,cjs"
+	},
 	"dependencies": {
 		"markdown-it": "^12.0.6",
 		"markdown-it-anchor": "^8.0.0"
 	},
 	"devDependencies": {
+		"@tsconfig/node14": "^1.0.1",
 		"@types/fs-extra": "^9.0.11",
 		"@types/markdown-it": "^12.0.2",
 		"@types/mocha": "^8.2.2",
@@ -22,7 +54,9 @@
 		"fs-extra": "^10.0.0",
 		"markdown-it-sup": "^1.0.0",
 		"mocha": "^9.0.0",
+		"nyc": "^15.1.0",
 		"ts-node": "^10.0.0",
+		"tsup": "^4.11.2",
 		"typescript": "^4.3.2"
 	}
 }

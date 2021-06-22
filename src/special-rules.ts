@@ -9,7 +9,7 @@ import {
 	processTextForVars,
 	tokenRecurser,
 } from './utils';
-import MarkdownItAnchor = require('markdown-it-anchor');
+import MarkdownItAnchor from 'markdown-it-anchor';
 
 /**
  * This rule handles inline notes
@@ -61,6 +61,14 @@ export const NotesRule: Rule = (state) => {
 	return true;
 };
 
+/**
+ * Rule to highlight text marked as a "variable", with the special delimiters
+ * @example
+ * ```md
+ * Test files are in `<^>project_root<^>/__tests__`
+ * ```
+ * - Any variable sections are turned into inline spans, with highlight class
+ */
 export const VariableHighlightRule: Rule = (state) => {
 	// NOTE: not using /g to avoid index changing with .test()
 	const patt = /(.*)<\^>(.+?)<\^>(.*)/m;
@@ -170,6 +178,11 @@ export const VariableHighlightRule: Rule = (state) => {
 	return true;
 };
 
+/**
+ * Rule for fenced code blocks, delimited in Markdown with the three backticks
+ *  - There is a lot of processing that goes on in this rule
+ *  - Overlap between this, variable highlighting, and spacing
+ */
 export const FencedCodeBlockRule: Rule = (state) => {
 	const spacingRuleIsActive = getIsRuleEnabled(state.md, 'do_spacing');
 	tokenRecurser(state, (token, index, tokenArr) => {
@@ -364,6 +377,10 @@ export const SpacingRule: Rule = (state) => {
 	return true;
 };
 
+/**
+ * Rule for headings, as well their associated `anchors`
+ *  - Uses `markdown-it-anchor` for some anchor pre-processing, before applying internal rules
+ */
 export const HeadingsRule: Rule = (state) => {
 	// Anchor transformation (e.g. `## Section -> <h2 id="section">Section</h2>)
 	const anchorOptions: AnchorOptions & { tabIndex?: boolean } = {
@@ -434,10 +451,72 @@ export const HeadingsRule: Rule = (state) => {
 };
 
 /**
- * I _believe_ the nofollow part of this rule is only applied to the previewer tool, and not to actual published posts
+ * Because rules don't execute right away, this is a separate init function for LinksRule, since it needs to patch the internal methods of MDIT
+ *  - This should be run if loading LinksRule. However, if using the standard Plugin loader, no need, since this should automatically be called.
+ */
+export const LinksPatchInternals = (md: MarkdownIt) => {
+	// DO does not auto-convert MD links `[]()` if missing protocol (https{1,})
+	// This is a little klunky, but was an easy spot to hook into MDIT's link internals to override the default behavior
+	const originalParseLinkDestination = md.helpers.parseLinkDestination;
+	md.helpers.parseLinkDestination = (str, pos, max) => {
+		const failRes = {
+			ok: false,
+			pos: 0,
+			lines: 0,
+			str: '',
+		};
+
+		// Call original func to get result, including URL
+		const originalRes = originalParseLinkDestination(str, pos, max);
+		const url = originalRes.str;
+
+		// URLs with full protocol are OK
+		if (/^https{0,1}\:\/\//i.test(url)) {
+			return originalRes;
+		}
+
+		// Or, internal anchor links are OK
+		if (/^#.*/i.test(url)) {
+			return originalRes;
+		}
+
+		return failRes;
+	};
+
+	// The same protocol required rule as above has to be applied to autolinker / plaintext links
+	// A little complicated - MDIT injects protocol before even hitting `normalizeLink` or `validateLink` or `autoLinker`
+	// Easiest place to hook is into matcher - see https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/rules_core/linkify.js#L65
+	const originalLinkifyMatcher = md.linkify.match.bind(md.linkify);
+	md.linkify.match = (str) => {
+		let linkMatchResults = originalLinkifyMatcher(str);
+		if (linkMatchResults) {
+			linkMatchResults = linkMatchResults.filter((res) => {
+				// Links can pass if they  have protocol, OR if they have www. prefix
+				return res.schema !== '' || res.raw.startsWith('www.');
+			});
+		}
+		return linkMatchResults;
+	};
+
+	// _Another_ exception to linkify for DO is if the links fall within unescaped HTML within a text token
+	// Example: `<a href="{LINK}">Hello</a>` in raw MD would not get linkified
+	// Easiest hook is linkify.test - see https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/rules_core/linkify.js#L62
+	const originalLinkifyTest = md.linkify.test.bind(md.linkify);
+	md.linkify.test = (str) => {
+		// Link open
+		if (/^<a[>\s]/i.test(str)) {
+			return false;
+		}
+		return originalLinkifyTest(str);
+	};
+};
+
+/**
+ * Rule applies to links
+ *  - I _believe_ the nofollow part of this rule is only applied to the previewer tool, and not to actual published posts
  */
 export const LinksRule: Rule = (state) => {
-	tokenRecurser(state, (token, index, tokenArr) => {
+	tokenRecurser(state, (token) => {
 		if (token.type === 'link_open') {
 			token.attrSet('rel', 'nofollow');
 		}

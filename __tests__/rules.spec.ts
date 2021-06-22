@@ -7,6 +7,7 @@ import assert = require('assert');
 import { applyLowLevelDefaults, RulesByName } from '../src';
 // @ts-ignore
 import Superscript = require('markdown-it-sup');
+import { LinksPatchInternals } from '../src/special-rules';
 
 function checkRenders(
 	mdIt: MarkdownIt,
@@ -38,23 +39,40 @@ function checkRenders(
 	});
 }
 
+type NamedRulePair = typeof RulesByName[keyof typeof RulesByName];
+
+function loadRule(
+	mditInstance: MarkdownIt,
+	rule: NamedRulePair | NamedRulePair[],
+	before?: NamedRulePair
+) {
+	const rules = Array.isArray(rule) ? rule : [rule];
+	rules.forEach((r) => {
+		if (before) {
+			mditInstance.core.ruler.before(before.name, r.name, r.ruleFn);
+		} else {
+			mditInstance.core.ruler.push(r.name, r.ruleFn);
+		}
+	});
+}
+
 describe('Tests Individual Rules', () => {
 	let mdItInstance: MarkdownIt;
 
 	const reset = () => {
 		mdItInstance = new MarkdownIt();
 		applyLowLevelDefaults(mdItInstance);
+		// A lot of the expected values rely on spacing and links
+		loadRule(mdItInstance, RulesByName.do_links);
+		LinksPatchInternals(mdItInstance);
+		loadRule(mdItInstance, RulesByName.do_spacing);
 	};
 	beforeEach(() => {
 		reset();
 	});
+	reset();
 
 	describe('Tests regular text', () => {
-		beforeEach(() => {
-			// @TODO - should spacing rule be auto-loaded in default loader?
-			const SpacingRule = RulesByName.do_spacing;
-			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
-		});
 		it('should render a paragraph', () => {
 			checkRenders(mdItInstance, [
 				{
@@ -115,14 +133,7 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests spacing rule', () => {
 		beforeEach(() => {
-			mdItInstance.core.ruler.push(
-				RulesByName.do_spacing.name,
-				RulesByName.do_spacing.ruleFn
-			);
-			mdItInstance.core.ruler.push(
-				RulesByName.do_code_blocks.name,
-				RulesByName.do_code_blocks.ruleFn
-			);
+			loadRule(mdItInstance, RulesByName.do_code_blocks, RulesByName.do_spacing);
 		});
 
 		it('should handle paragraphs, and related spacing', () => {
@@ -147,14 +158,6 @@ describe('Tests Individual Rules', () => {
 	});
 
 	describe('Tests links rule', () => {
-		beforeEach(() => {
-			// @TODO - should spacing rule be auto-loaded in default loader?
-			const SpacingRule = RulesByName.do_spacing;
-			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
-			const LinksRule = RulesByName.do_links;
-			mdItInstance.core.ruler.push(LinksRule.name, LinksRule.ruleFn);
-		});
-
 		it('should handle a variety of link types', () => {
 			checkRenders(mdItInstance, [
 				{
@@ -177,10 +180,7 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests headline rules', () => {
 		beforeEach(() => {
-			const SpacingRule = RulesByName.do_spacing;
-			const HeadingsRule = RulesByName.do_headings;
-			mdItInstance.core.ruler.push(HeadingsRule.name, HeadingsRule.ruleFn);
-			mdItInstance.core.ruler.push(SpacingRule.name, SpacingRule.ruleFn);
+			loadRule(mdItInstance, RulesByName.do_headings, RulesByName.do_links);
 		});
 		it('should handle headings', () => {
 			checkRenders(mdItInstance, [
@@ -205,10 +205,7 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests notes rule', () => {
 		beforeEach(() => {
-			mdItInstance.use((md) => {
-				const rule = RulesByName.do_notes;
-				md.core.ruler.push(rule.name, rule.ruleFn);
-			});
+			loadRule(mdItInstance, RulesByName.do_notes, RulesByName.do_spacing);
 		});
 
 		it('should handle notes', () => {
@@ -223,10 +220,7 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests variable highlighting rule', () => {
 		beforeEach(() => {
-			mdItInstance.use((md) => {
-				const rule = RulesByName.do_variable_highlights;
-				md.core.ruler.push(rule.name, rule.ruleFn);
-			});
+			loadRule(mdItInstance, RulesByName.do_variable_highlights, RulesByName.do_spacing);
 		});
 
 		it('should handle inline variables, mixed with text', () => {
@@ -234,7 +228,7 @@ describe('Tests Individual Rules', () => {
 				// This should get parsed as inline token, with 1 text child
 				{
 					input: `Hello <^>Joshua<^>!`,
-					expected: `<p>Hello <span class="highlight">Joshua</span>!</p>`,
+					expected: `<p>Hello <span class="highlight">Joshua</span>!</p>\n`,
 				},
 				{
 					input: 'Paragraph, `code`, now <^>variable<^>, now `a <^>var<^> in in-line code`, now end of paragraph.',
@@ -248,11 +242,11 @@ describe('Tests Individual Rules', () => {
 			checkRenders(mdItInstance, [
 				{
 					input: 'My sample is `hello <^>Joshua<^>, it is <^>Monday<^>!`, which has two values filled by vars.',
-					expected: `<p>My sample is <code>hello <span class="highlight">Joshua</span>, it is <span class="highlight">Monday</span>!</code>, which has two values filled by vars.</p>`,
+					expected: `<p>My sample is <code>hello <span class="highlight">Joshua</span>, it is <span class="highlight">Monday</span>!</code>, which has two values filled by vars.</p>\n`,
 				},
 				{
 					input: '`<^>var<^>`',
-					expected: `<p><code><span class="highlight">var</span></code></p>`,
+					expected: `<p><code><span class="highlight">var</span></code></p>\n`,
 				},
 			]);
 		});
@@ -265,7 +259,7 @@ describe('Tests Individual Rules', () => {
 				// (see implementation for details)
 				{
 					input: `Hello <^>Joshua<^>!`,
-					expected: `<p>Hello <span class="highlight">Joshua</span>!</p>`,
+					expected: `<p>Hello <span class="highlight">Joshua</span>!</p>\n`,
 				},
 			]);
 		});
@@ -273,10 +267,7 @@ describe('Tests Individual Rules', () => {
 
 	describe('Tests code fence rule', () => {
 		beforeEach(() => {
-			mdItInstance.use((md) => {
-				const rule = RulesByName.do_code_blocks;
-				md.core.ruler.push(rule.name, rule.ruleFn);
-			});
+			loadRule(mdItInstance, RulesByName.do_code_blocks, RulesByName.do_spacing);
 		});
 
 		it('should handle standard fenced code blocks', () => {
