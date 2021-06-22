@@ -37,7 +37,7 @@
 	"license": "MIT",
 	"scripts": {
 		"test:nocov": "mocha \"./__tests__/**/*.spec.ts\"",
-		"test": "nyc --reporter=lcov npm run test:nocov",
+		"test": "c8 --reporter=lcov --reporter=text npm run test:nocov",
 		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\"",
 		"build": "tsup src/index.ts --dts --format esm,cjs"
 	},
@@ -51,10 +51,10 @@
 		"@types/markdown-it": "^12.0.2",
 		"@types/mocha": "^8.2.2",
 		"@types/node": "^15.12.2",
+		"c8": "^7.7.3",
 		"fs-extra": "^10.0.0",
 		"markdown-it-sup": "^1.0.0",
 		"mocha": "^9.0.0",
-		"nyc": "^15.1.0",
 		"ts-node": "^10.0.0",
 		"tsup": "^4.11.2",
 		"typescript": "^4.3.2"

@@ -7,9 +7,9 @@ import {
 	NotesRule,
 	SpacingRule,
 	VariableHighlightRule,
-} from './special-rules';
-import type { MarkdownIt, RenderRule } from './types';
-import { docoEscape } from './utils';
+} from './special-rules.js';
+import type { MarkdownIt, RenderRule } from './types.js';
+import { docoEscape } from './utils.js';
 
 /**
  * All rules, in an ordered array

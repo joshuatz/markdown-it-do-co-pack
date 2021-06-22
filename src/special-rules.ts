@@ -1,5 +1,5 @@
 import type { AnchorOptions } from 'markdown-it-anchor';
-import { MarkdownIt, Rule, Token } from './types';
+import { MarkdownIt, Rule, Token } from './types.js';
 import {
 	codeBlockEscape,
 	docoEscape,
@@ -8,7 +8,7 @@ import {
 	getNewLineToken,
 	processTextForVars,
 	tokenRecurser,
-} from './utils';
+} from './utils.js';
 import MarkdownItAnchor from 'markdown-it-anchor';
 
 /**

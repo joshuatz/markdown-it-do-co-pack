@@ -1,5 +1,5 @@
 import type { Nesting } from 'markdown-it/lib/token';
-import type { MarkdownIt, StateCore, Token } from './types';
+import type { MarkdownIt, StateCore, Token } from './types.js';
 
 export function getHtmlBlock(state: StateCore, nesting: Nesting, content?: string) {
 	const token = new state.Token('html_block', '', nesting);

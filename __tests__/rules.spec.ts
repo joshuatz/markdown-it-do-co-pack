@@ -2,12 +2,12 @@
  * @file These tests should cover each rule, as isolated as possible
  */
 
-import MarkdownIt = require('markdown-it');
-import assert = require('assert');
-import { applyLowLevelDefaults, RulesByName } from '../src';
+import MarkdownIt from 'markdown-it';
+import assert from 'assert';
+import { applyLowLevelDefaults, RulesByName } from '../src/index.js';
 // @ts-ignore
-import Superscript = require('markdown-it-sup');
-import { LinksPatchInternals } from '../src/special-rules';
+import Superscript from 'markdown-it-sup';
+import { LinksPatchInternals } from '../src/special-rules.js';
 
 function checkRenders(
 	mdIt: MarkdownIt,

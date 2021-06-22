@@ -2,11 +2,16 @@
  * @file These tests should cover the entire plugin, and cover the intersection of multiple rules working together
  */
 
-import { readdir, readFile, writeFile } from 'fs-extra';
+import fs from 'fs-extra';
+const { readdir, readFile, writeFile } = fs;
 import { normalize } from 'path';
-import DoAuthoringMdItPlugin, { DoPluginOptions } from '../src';
-import MarkdownIt = require('markdown-it');
-import assert = require('assert');
+import DoAuthoringMdItPlugin, { DoPluginOptions } from '../src/index.js';
+import MarkdownIt from 'markdown-it';
+import assert from 'assert';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const DEBUG_DIR_PATH = normalize(`${__dirname}/../debug-out`);
 const FIXTURES_DIR_PATH = normalize(`${__dirname}/fixtures`);
