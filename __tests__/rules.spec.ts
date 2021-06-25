@@ -97,19 +97,6 @@ describe('Tests Individual Rules', () => {
 			]);
 		});
 
-		// I honestly don't think this should be honored / implemented
-		// It would take a lot of work to implement (hard to override MDIT's use of trim(), since it is deeply nested here - https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/rules_block/paragraph.js#L35
-		// Furthermore, this doesn't really have a practical effect - paragraphs are block level elements, and even if you make them inline, the browser collapses whitespace on the ends anyways
-		it.skip('should not trim paragraph ends', () => {
-			checkRenders(mdItInstance, [
-				{
-					input: 'I have a trailing space ',
-					expected:
-						'<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say </p>\n\n',
-				},
-			]);
-		});
-
 		it(`should escape based on DO's rules`, () => {
 			checkRenders(mdItInstance, [
 				{
@@ -126,6 +113,42 @@ describe('Tests Individual Rules', () => {
 					input: `DO supports _"variable highlighting"_, which is to say`,
 					expected:
 						'<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say</p>\n\n',
+				},
+			]);
+		});
+
+		// Note: The extra spacing between words when the comment is removed is exactly
+		// how the markdown preview tool returns it. Furthermore, I think it is fine,
+		// since the browser will collapse whitespace anyways.
+		it(`should handle HTML comments interspersed with plain text`, () => {
+			checkRenders(mdItInstance, [
+				{
+					input: `Hello <!-- I'm a comment! --> World`,
+					expected: `<p>Hello  World</p>\n\n`,
+				},
+			]);
+		});
+
+		it('should handle plain HTML comments', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: `<!-- Hello -->`,
+					// @TODO - should this be just ''? Should be able to fix if I address
+					// the multi-line HTML comment issue / html parsing token issue
+					expected: '<p></p>\n',
+				},
+			]);
+		});
+
+		// I honestly don't think this should be honored / implemented
+		// It would take a lot of work to implement (hard to override MDIT's use of trim(), since it is deeply nested here - https://github.com/markdown-it/markdown-it/blob/064d602c6890715277978af810a903ab014efc73/lib/rules_block/paragraph.js#L35
+		// Furthermore, this doesn't really have a practical effect - paragraphs are block level elements, and even if you make them inline, the browser collapses whitespace on the ends anyways
+		it.skip('should not trim paragraph ends', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: 'I have a trailing space ',
+					expected:
+						'<p>DO supports <em>&ldquo;variable highlighting&rdquo;</em>, which is to say </p>\n\n',
 				},
 			]);
 		});
@@ -284,6 +307,18 @@ describe('Tests Individual Rules', () => {
 				{
 					input: "```js\nvar myName = '<^>joshua<^>';\n```",
 					expected: `<pre class="code-pre "><code class="code-highlight language-js">var myName = '<span class="highlight">joshua</span>';\n</code></pre>`,
+				},
+				// complex example - includes indentation and highlights
+				{
+					input: '```jsx\n[label /components/GoUpDirectoryLink.jsx]\nimport { globalHistory } from "@reach/router";\n<^>import { Link } from "gatsby";<^>\nimport React from "react";\n\nexport const GoUpDirectoryLink = ({ children, slug }) => {\n	const currPathName = globalHistory.location.pathname;\n	const isTopLevel = slug === "/";\n\n	<^>if (isTopLevel) {<^>\n		<^>return;<^>\n	<^>}<^>\n\n	return (\n		<^><Link to={`${currPathName + "/../"}`} title="Go to parent directory"><^>\n			{children}\n		<^></Link><^>\n	);\n};\n\n<^>export default GoUpDirectoryLink;<^>\n\nexport const test = "123";\n```',
+					expected:
+						'<div class="code-label " title="/components/GoUpDirectoryLink.jsx">/components/GoUpDirectoryLink.jsx</div><pre class="code-pre "><code class="code-highlight language-jsx">import { globalHistory } from "@reach/router";\n<span class="highlight">import { Link } from "gatsby";</span>\nimport React from "react";\n\nexport const GoUpDirectoryLink = ({ children, slug }) =&gt; {\n    const currPathName = globalHistory.location.pathname;\n    const isTopLevel = slug === "/";\n\n    <span class="highlight">if (isTopLevel) {</span>\n        <span class="highlight">return;</span>\n    <span class="highlight">}</span>\n\n    return (\n        <span class="highlight">&lt;Link to={`${currPathName + "/../"}`} title="Go to parent directory"&gt;</span>\n            {children}\n        <span class="highlight">&lt;/Link&gt;</span>\n    );\n};\n\n<span class="highlight">export default GoUpDirectoryLink;</span>\n\nexport const test = "123";\n</code></pre>\n',
+				},
+				// indented command
+				{
+					input: '```command\nhello\n    space indent\n	tab indent\nend\n```',
+					expected:
+						'<pre class="code-pre command prefixed"><code class="code-highlight language-bash"><ul class="prefixed"><li class="line" data-prefix="$">hello\n</li><li class="line" data-prefix="$">    space indent\n</li><li class="line" data-prefix="$">    tab indent\n</li><li class="line" data-prefix="$">end\n</li></ul></code></pre>\n',
 				},
 			]);
 		});

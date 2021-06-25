@@ -8,10 +8,9 @@ import { normalize } from 'path';
 import DoAuthoringMdItPlugin, { DoPluginOptions } from '../src/index.js';
 import MarkdownIt from 'markdown-it';
 import assert from 'assert';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { getEsmDirname } from '../src/utils.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = getEsmDirname(import.meta);
 
 const DEBUG_DIR_PATH = normalize(`${__dirname}/../debug-out`);
 const FIXTURES_DIR_PATH = normalize(`${__dirname}/fixtures`);

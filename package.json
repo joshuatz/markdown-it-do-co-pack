@@ -39,7 +39,8 @@
 		"test:nocov": "mocha \"./__tests__/**/*.spec.ts\"",
 		"test": "c8 --reporter=lcov --reporter=text npm run test:nocov",
 		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\"",
-		"build": "tsup src/index.ts --dts --format esm,cjs"
+		"build": "tsup src/index.ts --dts --format esm,cjs",
+		"perf": "node --loader ts-node/esm/transpile-only scripts/perf.ts"
 	},
 	"dependencies": {
 		"markdown-it": "^12.0.6",

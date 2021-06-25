@@ -1,5 +1,7 @@
 import type { Nesting } from 'markdown-it/lib/token';
 import type { MarkdownIt, StateCore, Token } from './types.js';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 export function getHtmlBlock(state: StateCore, nesting: Nesting, content?: string) {
 	const token = new state.Token('html_block', '', nesting);
@@ -98,33 +100,49 @@ export function processTextForVars(input: {
 	return output;
 }
 
-/**
- * This is a basically a minimal subset of escapeHtml, since code blocks need less escaping
- *  - For example, quotes are allowed through
- * @param input The actual inner code within the fenced code block
- */
-export function codeBlockEscape(input: string) {
-	let output = input;
-	const specialCharReplacements: Array<{
-		find: string | RegExp;
-		replace: string | ((substring: string, ...args: any[]) => string);
-	}> = [
-		// RUN THESE FIRST
-		{
-			find: /&/g,
-			replace: '&amp;',
-		},
-		{
-			find: /</g,
-			replace: '&lt;',
-		},
-		{
-			find: />/g,
-			replace: '&gt;',
-		},
-	];
+interface ReplacementConfig {
+	find: string | RegExp;
+	replace: string | ((substring: string, ...args: any[]) => string);
+}
 
-	specialCharReplacements.forEach((c) => {
+const HtmlReplacements: Record<'comments' | '&' | '>' | '<', ReplacementConfig> = {
+	// catch any HTML comments (`<!-- -->`) that haven't been removed yet
+	comments: {
+		find: /<!--.*?-->/gm,
+		replace: '',
+	},
+	'&': {
+		find: /&/g,
+		replace: '&amp;',
+	},
+	'>': {
+		find: />/g,
+		replace: '&gt;',
+	},
+	'<': {
+		find: /</g,
+		replace: '&lt;',
+	},
+};
+
+const HtmlReplacementsOrdered = [
+	HtmlReplacements['comments'],
+	HtmlReplacements['&'],
+	HtmlReplacements['>'],
+	HtmlReplacements['<'],
+];
+
+/**
+ * Replaces '\t' with ' ' x4
+ */
+export const TabReplacer: ReplacementConfig = {
+	find: /\t/gm,
+	replace: '    ',
+};
+
+export function runReplacers(input: string, replacerConfigs: ReplacementConfig[]) {
+	let output = input;
+	replacerConfigs.forEach((c) => {
 		// @ts-ignore
 		output = output.replace(c.find, c.replace);
 	});
@@ -133,28 +151,32 @@ export function codeBlockEscape(input: string) {
 }
 
 /**
+ * This is a basically a minimal subset of escapeHtml, since code blocks need way less escaping
+ *  - For example, quotes are allowed through
+ * @param input The actual inner code within the fenced code block
+ */
+export function codeBlockEscape(input: string) {
+	const specialCharReplacements: ReplacementConfig[] = [
+		HtmlReplacements['&'],
+		HtmlReplacements['>'],
+		HtmlReplacements['<'],
+		TabReplacer,
+	];
+
+	return runReplacers(input, specialCharReplacements);
+}
+
+/**
  * This is basically DO-flavored HTML escaping
  *  - Be careful not to call escapeHtml on the text returned by this, or else you will end up with double escaped entities (since this returns `&` as part of HTML encoding)
  */
 export function docoEscape(input: string) {
-	let output = input;
 	const specialCharReplacements: Array<{
 		find: string | RegExp;
 		replace: string | ((substring: string, ...args: any[]) => string);
 	}> = [
 		// RUN THESE FIRST
-		{
-			find: /&/g,
-			replace: '&amp;',
-		},
-		{
-			find: /</g,
-			replace: '&lt;',
-		},
-		{
-			find: />/g,
-			replace: '&gt;',
-		},
+		...HtmlReplacementsOrdered,
 		// ... then everything else
 		// Special quote replacement
 		// DO tries to find pairs first, replacing with fancy quotes, then falls back to regular doubles
@@ -264,12 +286,7 @@ export function docoEscape(input: string) {
 		},
 	];
 
-	specialCharReplacements.forEach((c) => {
-		// @ts-ignore
-		output = output.replace(c.find, c.replace);
-	});
-
-	return output;
+	return runReplacers(input, specialCharReplacements);
 }
 
 /**
@@ -311,4 +328,8 @@ export function getIsRuleEnabled(mditInstance: MarkdownIt, ruleName: string, jsF
 	}
 
 	return false;
+}
+
+export function getEsmDirname(importMeta: ImportMeta) {
+	return dirname(fileURLToPath(importMeta.url));
 }

@@ -1,5 +1,5 @@
 import type { AnchorOptions } from 'markdown-it-anchor';
-import { MarkdownIt, Rule, Token } from './types.js';
+import { MarkdownIt, Rule, Token, RuleCore } from './types.js';
 import {
 	codeBlockEscape,
 	docoEscape,
@@ -7,6 +7,8 @@ import {
 	getIsRuleEnabled,
 	getNewLineToken,
 	processTextForVars,
+	runReplacers,
+	TabReplacer,
 	tokenRecurser,
 } from './utils.js';
 import MarkdownItAnchor from 'markdown-it-anchor';
@@ -19,9 +21,8 @@ import MarkdownItAnchor from 'markdown-it-anchor';
  * **Warning:** Use this to warn users.
  * <$>
  * ```
- * @param state This
  */
-export const NotesRule: Rule = (state) => {
+export const NotesRule: RuleCore = (state) => {
 	const patt = /<\$>\[(.+)\].+<\$>$/ms;
 	const { tokens } = state;
 
@@ -69,7 +70,7 @@ export const NotesRule: Rule = (state) => {
  * ```
  * - Any variable sections are turned into inline spans, with highlight class
  */
-export const VariableHighlightRule: Rule = (state) => {
+export const VariableHighlightRule: RuleCore = (state) => {
 	// NOTE: not using /g to avoid index changing with .test()
 	const patt = /(.*)<\^>(.+?)<\^>(.*)/m;
 
@@ -183,7 +184,7 @@ export const VariableHighlightRule: Rule = (state) => {
  *  - There is a lot of processing that goes on in this rule
  *  - Overlap between this, variable highlighting, and spacing
  */
-export const FencedCodeBlockRule: Rule = (state) => {
+export const FencedCodeBlockRule: RuleCore = (state) => {
 	const spacingRuleIsActive = getIsRuleEnabled(state.md, 'do_spacing');
 	tokenRecurser(state, (token, index, tokenArr) => {
 		if (token.type === 'fence' && token.tag === 'code') {
@@ -200,6 +201,7 @@ export const FencedCodeBlockRule: Rule = (state) => {
 
 			const rawCodeLines = token.content.split(/\r\n|\n|\r/gm);
 			const processedCodeLines: string[] = [];
+			let rawInnerCode = '';
 			/** Any extra classes to be injected into `<pre>` */
 			let extraPreClasses: string[] = [];
 			/**
@@ -267,27 +269,42 @@ export const FencedCodeBlockRule: Rule = (state) => {
 				// To have complete parity with the MD preview tool, line breaks are a little odd
 				// it breaks them right before closing tags, so `<ul><li>line 1\n</li><li>line 2\n</li></ul>
 				const liOpenHtml = `<li class="line" data-prefix="${
-					commandPrefix === '>' ? commandPrefix : codeBlockEscape(commandPrefix)
+					commandPrefix === '>' ? commandPrefix : docoEscape(commandPrefix)
 				}">`;
 
-				processedCodeLines[0] = `<ul class="prefixed">${liOpenHtml}${codeBlockEscape(
+				const escapeLine = (lineStr: string) => {
+					return processTextForVars({
+						text: lineStr,
+						nonVarTextProcessor: codeBlockEscape,
+						varTextProcessor: codeBlockEscape,
+					});
+				};
+
+				processedCodeLines[0] = `<ul class="prefixed">${liOpenHtml}${escapeLine(
 					processedCodeLines[0]
 				)}`;
 				processedCodeLines.forEach((line, index) => {
 					// Looks like empty lines are preserved if they come in-between other command lines
 					if (index > 0 && (index !== processedCodeLines.length - 1 || line.length)) {
-						processedCodeLines[index] = `</li>${liOpenHtml}${codeBlockEscape(line)}`;
+						processedCodeLines[index] = `</li>${liOpenHtml}${escapeLine(line)}`;
 					}
 				});
 				// Close out final list item, and entire list, inline with code closing tags
 				extraStringBeforeClosingCodeTags = `</li></ul>`;
+
+				// Each line has been escaped as we went, so no extra escaping needed
+				rawInnerCode = processedCodeLines.join('\n');
+			} else {
+				// This is not a `command` block
+				rawInnerCode = processTextForVars({
+					text: processedCodeLines.join('\n'),
+					nonVarTextProcessor: codeBlockEscape,
+					varTextProcessor: codeBlockEscape,
+				});
 			}
 
-			// Make sure to catch and span wrap <^>varString<^> blocks
-			// and also make sure only one line break between code end and </code> tag
-			let rawInnerCode = processTextForVars({
-				text: processedCodeLines.join('\n'),
-			}).trimEnd();
+			// Make sure only one line break between code end and </code> tag
+			rawInnerCode = rawInnerCode.trimEnd();
 
 			if (labels.secondary) {
 				// secondary label is actually inserted directly inside <code>
@@ -337,7 +354,7 @@ export const FencedCodeBlockRule: Rule = (state) => {
  *  - It should always come last, since spacing is highly dependent on what tokens are next to each other
  *  - This could probably be optimized further
  */
-export const SpacingRule: Rule = (state) => {
+export const SpacingRule: RuleCore = (state) => {
 	// We could hook into a lower-level rule, but this approach here does not require
 	// precise ordering of hooks or relying on named rules
 	tokenRecurser(state, (token, index, tokenArr) => {
@@ -381,7 +398,7 @@ export const SpacingRule: Rule = (state) => {
  * Rule for headings, as well their associated `anchors`
  *  - Uses `markdown-it-anchor` for some anchor pre-processing, before applying internal rules
  */
-export const HeadingsRule: Rule = (state) => {
+export const HeadingsRule: RuleCore = (state) => {
 	// Anchor transformation (e.g. `## Section -> <h2 id="section">Section</h2>)
 	const anchorOptions: AnchorOptions & { tabIndex?: boolean } = {
 		tabIndex: false,
@@ -437,7 +454,7 @@ export const HeadingsRule: Rule = (state) => {
 	const Interceptor = {
 		core: {
 			ruler: {
-				push: (name: string, callback: Rule) => {
+				push: (name: string, callback: RuleCore) => {
 					callback(state);
 				},
 			},
@@ -515,7 +532,7 @@ export const LinksPatchInternals = (md: MarkdownIt) => {
  * Rule applies to links
  *  - I _believe_ the nofollow part of this rule is only applied to the previewer tool, and not to actual published posts
  */
-export const LinksRule: Rule = (state) => {
+export const LinksRule: RuleCore = (state) => {
 	tokenRecurser(state, (token) => {
 		if (token.type === 'link_open') {
 			token.attrSet('rel', 'nofollow');
