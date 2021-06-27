@@ -20,21 +20,26 @@ function checkRenders(
 	checks.forEach((c) => {
 		const rendered = mdIt.render(c.input);
 		try {
-			assert.strictEqual(rendered, c.expected);
-		} catch (firstErr) {
-			if (allowTrailingLineBreak) {
-				try {
-					assert.strictEqual(rendered, c.expected + '\n');
-				} catch (secondErr) {
+			try {
+				assert.strictEqual(rendered, c.expected);
+			} catch (firstErr) {
+				if (allowTrailingLineBreak) {
 					try {
-						assert.strictEqual(rendered + '\n', c.expected);
-					} catch (thirdErr) {
-						throw firstErr;
+						assert.strictEqual(rendered, c.expected + '\n');
+					} catch (secondErr) {
+						try {
+							assert.strictEqual(rendered + '\n', c.expected);
+						} catch (thirdErr) {
+							throw firstErr;
+						}
 					}
+				} else {
+					throw firstErr;
 				}
-			} else {
-				throw firstErr;
 			}
+		} catch (err) {
+			console.log(`Rendered\n\n`, rendered);
+			throw err;
 		}
 	});
 }
@@ -136,6 +141,36 @@ describe('Tests Individual Rules', () => {
 					// @TODO - should this be just ''? Should be able to fix if I address
 					// the multi-line HTML comment issue / html parsing token issue
 					expected: '<p></p>\n',
+				},
+			]);
+		});
+
+		it('should handle multi-line HTML comments', () => {
+			checkRenders(mdItInstance, [
+				// Mixed in with other content, and multi-line comments
+				{
+					input: '<!--\n\nThis is a multi-line comment\n\n-->\n\nParagraph text\n\nThis text has a <!-- hello --> comment wedged in the middle\n\n<!--\n\nAnother multi-line comment\n\n\n-->\n\n<!-- single line comment -->',
+					expected:
+						'<p>Paragraph text</p>\n\n<p>This text has a  comment wedged in the middle</p>\n\n',
+				},
+			]);
+		});
+
+		/**
+		 * This is a really special test case, and I believe an edge-case for the preview tool
+		 * The _official_ preview tool actually fails on this, and will stick the command and code block in the output
+		 * However, adhering to how the preview tool acts would break previews for a lot of cases, so I believe deviating from strict adherence is fine in this case
+		 *
+		 * I can totally see how this ended up as the case with the preview tool though - this is really complicated to solve because of how MD is parsed.
+		 *
+		 * With HTML turned off, MDIT parses a multi-line HTML comment into multiple token, which then makes it MUCH harder to remove HTML comments.
+		 */
+		it('should handle HTML comments with code, even though preview tool does not', () => {
+			checkRenders(mdItInstance, [
+				{
+					input: 'Paragraph text\n\n\n<!--\n\nThis comment has a fenced code block in it:\n\n\n```\ncode\n```\n\n\n-->\n\n<!-- single line comment -->\n\nEnd',
+					// The official preview actually includes the code block in output
+					expected: '<p>Paragraph text</p>\n\n<p>End</p>\n\n',
 				},
 			]);
 		});

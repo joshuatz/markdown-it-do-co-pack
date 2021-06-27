@@ -1,17 +1,18 @@
 import type { AnchorOptions } from 'markdown-it-anchor';
-import { MarkdownIt, Rule, Token, RuleCore } from './types.js';
+import MarkdownItAnchor from 'markdown-it-anchor';
+import { RulesByName } from './index.js';
+import { MarkdownIt, RuleCore, Token } from './types.js';
 import {
 	codeBlockEscape,
 	docoEscape,
 	getHtmlBlock,
 	getIsRuleEnabled,
 	getNewLineToken,
+	HtmlReplacements,
 	processTextForVars,
 	runReplacers,
-	TabReplacer,
 	tokenRecurser,
 } from './utils.js';
-import MarkdownItAnchor from 'markdown-it-anchor';
 
 /**
  * This rule handles inline notes
@@ -185,7 +186,7 @@ export const VariableHighlightRule: RuleCore = (state) => {
  *  - Overlap between this, variable highlighting, and spacing
  */
 export const FencedCodeBlockRule: RuleCore = (state) => {
-	const spacingRuleIsActive = getIsRuleEnabled(state.md, 'do_spacing');
+	const spacingRuleIsActive = getIsRuleEnabled(state.md, RulesByName.do_spacing.name);
 	tokenRecurser(state, (token, index, tokenArr) => {
 		if (token.type === 'fence' && token.tag === 'code') {
 			const labels: {
@@ -538,6 +539,103 @@ export const LinksRule: RuleCore = (state) => {
 			token.attrSet('rel', 'nofollow');
 		}
 	});
+
+	return true;
+};
+
+/**
+ * This rule attempts to find and handle HTML comments. Implementation is a little complicated when MDIT has HTML turned off, because comments can end up spanning multiple nodes, with content in-between start and end
+ * @example `<!-- HTML Comment -->`
+ * @example
+ * ```md
+ * HTML comments can span multiple lines, and start & end anywhere, <!-- like
+ *
+ * === hello ====
+ *
+ * ...this
+ * -->
+ * ```
+ */
+export const HtmlCommentsRule: RuleCore = (state) => {
+	function unescapeBrackets(input: string) {
+		let output = input.replace(/&lt;/g, '<');
+		output = output.replace(/&gt;/g, '>');
+		return output;
+	}
+
+	if (!state.md.options.html) {
+		const entireChainLength = state.tokens.length;
+		tokenRecurser(state, (token, index, tokenArr) => {
+			const prevToken = tokenArr[index - 1];
+			const nextToken = tokenArr[index + 1];
+			const content = unescapeBrackets(token.content);
+			// avoid splicing in middle of <p>
+			let spliceStart = prevToken && prevToken.type === 'paragraph_open' ? index - 1 : index;
+
+			if (token.type !== 'inline') {
+				return;
+			}
+
+			// HTML comment contained in single token, empty when removed
+			if (runReplacers(content, [HtmlReplacements['comments']]) === '') {
+				const chopNum = nextToken && nextToken.type === 'paragraph_close' ? 3 : 1;
+				if (chopNum < entireChainLength) {
+					tokenArr.splice(spliceStart, chopNum);
+					return {
+						tokenArr,
+						nextIndex: spliceStart,
+					};
+				}
+			}
+
+			// This handles an HTML comment that spans multiple tokens
+			if (content.includes('<!--') && !content.includes('-->')) {
+				let endFound = false;
+
+				let spliceEnd = spliceStart;
+
+				if (content !== '<!--') {
+					// Content might be something like `hello <!-- inside`
+					token.content = content.split('<!--')[0];
+					// Don't remove token entirely!
+					spliceStart--;
+				}
+
+				// Try to find end of HTML comment, starting after current
+				for (let e = spliceStart; e < tokenArr.length; e++) {
+					const eToken = tokenArr[e];
+					const eTokenContent = unescapeBrackets(eToken.content);
+
+					if (eTokenContent.includes('-->') && eToken.type === 'inline') {
+						// avoid splitting in middle of <p>
+						const nextToken = tokenArr[e + 1];
+						spliceEnd = nextToken && nextToken.type === 'paragraph_close' ? e + 1 : e;
+
+						if (eTokenContent !== '-->') {
+							eToken.content = eTokenContent.split('-->')[1];
+							// Don't remove token entirely!
+							spliceEnd = spliceEnd - 2;
+						}
+
+						// Stop here!
+						endFound = true;
+						break;
+					}
+				}
+
+				const chopNum = spliceEnd - spliceStart + 1;
+
+				if (endFound) {
+					tokenArr.splice(spliceStart, chopNum);
+					return {
+						tokenArr,
+						// back-peddling, since we just removed chunk
+						nextIndex: spliceStart,
+					};
+				}
+			}
+		});
+	}
 
 	return true;
 };

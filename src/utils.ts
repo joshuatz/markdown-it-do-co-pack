@@ -1,7 +1,8 @@
+import type Ruler from 'markdown-it/lib/ruler';
 import type { Nesting } from 'markdown-it/lib/token';
-import type { MarkdownIt, StateCore, Token } from './types.js';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import type { InternalRuleTracker, MarkdownIt, Rule, StateCore, Token } from './types.js';
 
 export function getHtmlBlock(state: StateCore, nesting: Nesting, content?: string) {
 	const token = new state.Token('html_block', '', nesting);
@@ -18,30 +19,44 @@ export function getNewLineToken(state: StateCore, nesting: Nesting = 0) {
 /**
  * Simple, and likely non-optimal recurser / flattener of tokens
  * - Inside callback, use index and array to replace current token if need be
+ * - If mutating token chain from inside callback, you can return updated index and array to recurser so next loop traverses updated chain
  */
 export function tokenRecurser(
 	input: StateCore | Token[],
-	callback: (currToken: Token, index: number, currTokenArr: Token[]) => void,
+	callback: (
+		currToken: Token,
+		index: number,
+		currTokenArr: Token[]
+	) => void | {
+		nextIndex: number;
+		tokenArr: Token[];
+	},
 	backwards = false
 ) {
 	const recurse = (tokenArr: Token[]) => {
-		const process = (token: Token, index: number) => {
-			callback(token, index, tokenArr);
+		let index = 0;
+		const process = () => {
+			const token = tokenArr[index];
+			const callbackRes = callback(token, index, tokenArr);
+			if (callbackRes) {
+				({ tokenArr, nextIndex: index } = callbackRes);
+			}
 			if (token.children) {
 				recurse(token.children);
 			}
 		};
 
 		if (backwards) {
-			for (let x = tokenArr.length - 1; x >= 0; x--) {
-				process(tokenArr[x], x);
+			for (index = tokenArr.length - 1; index >= 0; index--) {
+				process();
 			}
 		} else {
-			for (let x = 0; x < tokenArr.length; x++) {
-				process(tokenArr[x], x);
+			for (index = 0; index < tokenArr.length; index++) {
+				process();
 			}
 		}
 	};
+
 	recurse(Array.isArray(input) ? input : input.tokens);
 }
 
@@ -105,7 +120,7 @@ interface ReplacementConfig {
 	replace: string | ((substring: string, ...args: any[]) => string);
 }
 
-const HtmlReplacements: Record<'comments' | '&' | '>' | '<', ReplacementConfig> = {
+export const HtmlReplacements: Record<'comments' | '&' | '>' | '<', ReplacementConfig> = {
 	// catch any HTML comments (`<!-- -->`) that haven't been removed yet
 	comments: {
 		find: /<!--.*?-->/gm,
@@ -143,8 +158,18 @@ export const TabReplacer: ReplacementConfig = {
 export function runReplacers(input: string, replacerConfigs: ReplacementConfig[]) {
 	let output = input;
 	replacerConfigs.forEach((c) => {
-		// @ts-ignore
-		output = output.replace(c.find, c.replace);
+		if (typeof c.find === 'string') {
+			output = output.replace(c.find, (...args) => {
+				if (typeof c.replace === 'string') {
+					return c.replace;
+				}
+
+				return c.replace(...args);
+			});
+		} else {
+			// @ts-ignore
+			output = output.replace(c.find, c.replace);
+		}
 	});
 
 	return output;
@@ -293,12 +318,7 @@ export function docoEscape(input: string) {
  * Internal use - get all rules loaded in MDIT
  */
 export function getAllRules(mditInstance: MarkdownIt) {
-	let allRules: Array<{
-		name: string;
-		enabled: boolean;
-		fn: Function;
-		alt: string[];
-	}> = [];
+	let allRules: InternalRuleTracker[] = [];
 	const ruleGroups = ['core', 'block', 'inline'] as const;
 	ruleGroups.forEach((chain) => {
 		// You are not supposed to use internals this way, but I see no other way to access rules in a way that gives you back the original names
@@ -310,24 +330,62 @@ export function getAllRules(mditInstance: MarkdownIt) {
 }
 
 /**
+ * Internal use - get rule by name, flexible, works across all Rulers
+ * @param mditInstance The instance of MarkdownIt
+ * @param ruleName The name that was used when loading into MDIT
+ * @param jsFnName The actual JavaScript function name of the rule.
+ */
+export function getRule(
+	mditInstance: MarkdownIt,
+	ruleName: string,
+	jsFnName?: string
+): null | InternalRuleTracker {
+	const allRules = getAllRules(mditInstance);
+	for (let r = 0; r < allRules.length; r++) {
+		const rule = allRules[r];
+		if (
+			rule.name === ruleName ||
+			rule.alt.includes(ruleName) ||
+			(jsFnName && rule.fn.name === jsFnName)
+		) {
+			return rule;
+		}
+	}
+
+	return null;
+}
+
+/**
  * Internal use - check if a rule is enabled
  * @param mditInstance The instance of MarkdownIt
  * @param ruleName The name that was used when loading into MDIT
  * @param jsFnName The actual JavaScript function name of the rule.
  */
 export function getIsRuleEnabled(mditInstance: MarkdownIt, ruleName: string, jsFnName?: string) {
-	const allRules = getAllRules(mditInstance);
-	for (const rule of allRules) {
-		if (
-			rule.name === ruleName ||
-			rule.alt.includes(ruleName) ||
-			(jsFnName && rule.fn.name === jsFnName)
-		) {
-			return rule.enabled;
-		}
+	const rule = getRule(mditInstance, ruleName, jsFnName);
+
+	if (rule) {
+		return rule.enabled;
 	}
 
 	return false;
+}
+
+/**
+ * Only pushes a rule if it does not exist in _any_ ruler, else enables it
+ */
+export function pushOrEnableRule<T>(
+	mditInstance: MarkdownIt,
+	ruler: Ruler<T>,
+	ruleName: string,
+	ruleFn: Rule
+) {
+	const rule = getRule(mditInstance, ruleName);
+	if (rule) {
+		mditInstance.enable(ruleName);
+	} else {
+		ruler.push(ruleName, ruleFn as any);
+	}
 }
 
 export function getEsmDirname(importMeta: ImportMeta) {

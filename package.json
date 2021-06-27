@@ -39,7 +39,8 @@
 		"test:nocov": "mocha \"./__tests__/**/*.spec.ts\"",
 		"test": "c8 --reporter=lcov --reporter=text npm run test:nocov",
 		"test:debug": "mocha --inspect \"./__tests__/**/*.spec.ts\"",
-		"build": "tsup src/index.ts --dts --format esm,cjs",
+		"build:web": "echo \"Error: not supported yet\" && exit 1",
+		"build": "tsup src/index.ts --dts --format esm,cjs --clean",
 		"perf": "node --loader ts-node/esm/transpile-only scripts/perf.ts"
 	},
 	"dependencies": {

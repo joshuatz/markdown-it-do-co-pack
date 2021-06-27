@@ -2,6 +2,7 @@ import type { PluginWithOptions } from 'markdown-it';
 import {
 	FencedCodeBlockRule,
 	HeadingsRule,
+	HtmlCommentsRule,
 	LinksPatchInternals,
 	LinksRule,
 	NotesRule,
@@ -9,7 +10,7 @@ import {
 	VariableHighlightRule,
 } from './special-rules.js';
 import type { MarkdownIt, RenderRule } from './types.js';
-import { docoEscape } from './utils.js';
+import { docoEscape, pushOrEnableRule } from './utils.js';
 
 /**
  * All rules, in an ordered array
@@ -19,6 +20,10 @@ const OrderedRules = [
 	{
 		name: 'do_headings',
 		ruleFn: HeadingsRule,
+	},
+	{
+		name: 'do_html_comments',
+		ruleFn: HtmlCommentsRule,
 	},
 	{
 		name: 'do_links',
@@ -72,6 +77,14 @@ function applyLowLevelDefaults(md: MarkdownIt) {
 
 	// DO does not process `~~text~~` as strikethrough
 	md.disable('strikethrough');
+
+	// Apply HTML commenting removal rule
+	pushOrEnableRule(
+		md,
+		md.core.ruler,
+		RulesByName.do_html_comments.name,
+		RulesByName.do_html_comments.ruleFn
+	);
 
 	// DO has some interesting replacements
 	/**
@@ -129,7 +142,7 @@ const DoAuthoringMdItPlugin: PluginWithOptions<DoPluginOptions> = (md, options) 
 	// Process rules in order defined, not order in arg
 	OrderedRules.forEach((rule) => {
 		if (selectedRulesByName.indexOf(rule.name) !== -1) {
-			md.core.ruler.push(rule.name, rule.ruleFn);
+			pushOrEnableRule(md, md.core.ruler, rule.name, rule.ruleFn);
 		}
 
 		if (rule.name === 'do_links') {
@@ -138,6 +151,6 @@ const DoAuthoringMdItPlugin: PluginWithOptions<DoPluginOptions> = (md, options) 
 	});
 };
 
-export { applyLowLevelDefaults, DoAuthoringMdItPlugin, NotesRule, RulesByName };
+export { applyLowLevelDefaults, DoAuthoringMdItPlugin, OrderedRules, RulesByName };
 export type { DoPluginOptions };
 export default DoAuthoringMdItPlugin;
