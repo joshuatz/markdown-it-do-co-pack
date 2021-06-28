@@ -5,5 +5,37 @@
 	"editor.autoIndent": "full",
 	"editor.codeActionsOnSave": {
 		"source.fixAll": true
-	}
+	},
+	"typescript.preferences.importModuleSpecifierEnding": "js",
+	"cSpell.enableFiletypes": [
+		"!c",
+		"!cpp",
+		"!csharp",
+		"!css",
+		"!go",
+		"!handlebars",
+		"!jade",
+		"!java",
+		"!javascript",
+		"!javascriptreact",
+		"!json",
+		"!jsonc",
+		"!latex",
+		"!less",
+		"!php",
+		"!pug",
+		"!python",
+		"!restructuredtext",
+		"!rust",
+		"!scala",
+		"!scss",
+		"!typescriptreact",
+		"!yaml",
+		"!yml",
+		"asciidoc",
+		"git-commit",
+		"plaintext",
+		"text"
+	],
+	"cSpell.words": ["MDIT", "Recurser", "doco", "linkify", "softbreak", "strikethrough"]
 }
