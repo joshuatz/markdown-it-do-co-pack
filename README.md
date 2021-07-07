@@ -189,6 +189,9 @@ Version | Date | Notes
 --- | --- | ---
 `1.0.0` | 6/28/2021 | Initial Release 🚀
 
+## Disclaimers
+> *DigitalOcean* is a registered trademark of DigitalOcean, LLC. This tool is not affiliated with nor endorsed by DigitalOcean or the DigitalOcean Community in any *official* capacity.
+
 ## About Me:
 
 More About Me (Joshua Tzucker):
