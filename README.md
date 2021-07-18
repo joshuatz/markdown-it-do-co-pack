@@ -23,7 +23,7 @@ For how to use the DO Community flavor of Markdown, you can refer to:
 
 - The [Markdown Preview Tool](https://www.digitalocean.com/community/markdown)
 - The [DO Article Templates](https://github.com/do-community/do-article-templates)
-- The [DO Formatting and Style Guide](do.co/style)
+- The [DO Formatting and Style Guide](https://do.co/style)
 
 For using _this package_, there are a few different ways you can use it to transform Markdown:
 
